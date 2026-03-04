@@ -1,31 +1,10 @@
+abstract class TaskEvent {}
 
-part of 'task_bloc.dart';
+class LoadTasksEvent extends TaskEvent {}
 
-abstract class TaskEvent extends Equatable {
-  const TaskEvent();
+class AddTaskEvent extends TaskEvent {
+  final String title;
+  final String status;
 
-  @override
-  List<Object> get props => [];
-}
-
-class LoadTasks extends TaskEvent {}
-
-class AddNewTask extends TaskEvent {
-  final Task task;
-  const AddNewTask(this.task);
-}
-
-class UpdateExistingTask extends TaskEvent {
-  final Task task;
-  const UpdateExistingTask(this.task);
-}
-
-class DeleteExistingTask extends TaskEvent {
-  final int id;
-  const DeleteExistingTask(this.id);
-}
-
-class SearchTasksEvent extends TaskEvent {
-  final String keyword;
-  const SearchTasksEvent(this.keyword);
+  AddTaskEvent({required this.title, required this.status});
 }
