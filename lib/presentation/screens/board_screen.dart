@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter/widget_previews.dart';
 import '../blocs/task_bloc.dart';
 import '../blocs/task_event.dart';
 import '../blocs/task_state.dart';
@@ -42,8 +40,8 @@ class _BoardScreenState extends State<BoardScreen> {
   void _onSearchChanged() {
     if (selectedBoardId != null) {
       context.read<TaskBloc>().add(
-        LoadTasks(boardId: selectedBoardId, query: searchController.text),
-      );
+            LoadTasks(boardId: selectedBoardId, query: searchController.text),
+          );
     }
   }
 
@@ -59,13 +57,10 @@ class _BoardScreenState extends State<BoardScreen> {
                   selectedBoardId = null;
                 });
               } else {
-                // Tự động chọn Bảng nếu chưa chọn, hoặc nếu Bảng đang chọn đã bị xóa
-                final isBoardCurrentSelectedExists = state.boards.any(
-                  (b) => b.id == selectedBoardId,
-                );
+                final isBoardCurrentSelectedExists =
+                    state.boards.any((b) => b.id == selectedBoardId);
 
                 if (selectedBoardId == null || !isBoardCurrentSelectedExists) {
-                  // Mặc định chọn Bảng mới nhất (nằm ở cuối list)
                   _selectBoard(state.boards.last.id);
                 }
               }
@@ -75,7 +70,6 @@ class _BoardScreenState extends State<BoardScreen> {
         BlocListener<TaskBloc, TaskState>(
           listener: (context, state) {
             if (state is TaskLoaded && isSearching && state.tasks.isNotEmpty) {
-              // Khi đang tìm kiếm, tự động Focus vào Tab chứa kết quả đầu tiên ở màn hình ngang
               if (selectedLandscapeStatus != state.tasks.first.status) {
                 setState(() {
                   selectedLandscapeStatus = state.tasks.first.status;
@@ -125,11 +119,11 @@ class _BoardScreenState extends State<BoardScreen> {
               onPressed: () {
                 if (selectedBoardId != null) {
                   context.read<TaskBloc>().add(
-                    LoadTasks(
-                      boardId: selectedBoardId,
-                      query: searchController.text,
-                    ),
-                  );
+                        LoadTasks(
+                          boardId: selectedBoardId,
+                          query: searchController.text,
+                        ),
+                      );
                 }
               },
             ),
@@ -237,9 +231,8 @@ class _BoardScreenState extends State<BoardScreen> {
                           isSelected
                               ? Icons.dashboard
                               : Icons.dashboard_outlined,
-                          color: isSelected
-                              ? Colors.blueAccent
-                              : Colors.black54,
+                          color:
+                              isSelected ? Colors.blueAccent : Colors.black54,
                         ),
                         title: Text(
                           board.title,
@@ -247,13 +240,12 @@ class _BoardScreenState extends State<BoardScreen> {
                             fontWeight: isSelected
                                 ? FontWeight.bold
                                 : FontWeight.normal,
-                            color: isSelected
-                                ? Colors.blueAccent
-                                : Colors.black87,
+                            color:
+                                isSelected ? Colors.blueAccent : Colors.black87,
                           ),
                         ),
                         selected: isSelected,
-                        selectedTileColor: Colors.blue.withValues(alpha: 0.05),
+                        selectedTileColor: Colors.blue.withOpacity(0.05),
                         onTap: () {
                           _selectBoard(board.id);
                           Navigator.pop(context); // Close drawer
@@ -288,7 +280,7 @@ class _BoardScreenState extends State<BoardScreen> {
               label: const Text('Thêm Bảng Mới'),
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(50),
-                backgroundColor: Colors.blue.withValues(alpha: 0.1),
+                backgroundColor: Colors.blue.withOpacity(0.1),
                 foregroundColor: Colors.blueAccent,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -307,8 +299,8 @@ class _BoardScreenState extends State<BoardScreen> {
       selectedBoardId = id;
     });
     context.read<TaskBloc>().add(
-      LoadTasks(boardId: id, query: searchController.text),
-    );
+          LoadTasks(boardId: id, query: searchController.text),
+        );
   }
 
   Widget _buildBoardContent(BuildContext context) {
@@ -319,15 +311,13 @@ class _BoardScreenState extends State<BoardScreen> {
         } else if (state is TaskLoaded) {
           return LayoutBuilder(
             builder: (context, constraints) {
-              final isWideScreen =
-                  constraints.maxWidth > 600 ||
+              final isWideScreen = constraints.maxWidth > 600 ||
                   MediaQuery.of(context).orientation == Orientation.landscape;
 
               if (isWideScreen) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Cột Menu bên trái
                     Container(
                       width: 250,
                       color: Colors.white,
@@ -354,15 +344,13 @@ class _BoardScreenState extends State<BoardScreen> {
                         ],
                       ),
                     ),
-                    // Kẻ dọc phân cách
                     Container(
                       width: 1,
-                      color: Colors.grey.withValues(alpha: 0.2),
+                      color: Colors.grey.withOpacity(0.2),
                     ),
-                    // Khu vực chứa thẻ bên phải
                     Expanded(
                       child: Container(
-                        color: Colors.grey[50], // Nền nhạt cho khu vực thẻ
+                        color: Colors.grey[50],
                         child: _buildLandscapeTaskContent(
                           context,
                           state.tasks,
@@ -374,47 +362,40 @@ class _BoardScreenState extends State<BoardScreen> {
                 );
               }
 
-              // Mặc định: Giao diện dọc (Portrait) - Menu sổ xuống
               return SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 24,
                 ),
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: double.infinity),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildColumn(
-                          context,
-                          'Cần làm',
-                          'todo',
-                          state.tasks,
-                          Colors.blueAccent,
-                        ),
-                        const SizedBox(height: 24),
-                        _buildColumn(
-                          context,
-                          'Đang làm',
-                          'doing',
-                          state.tasks,
-                          Colors.orangeAccent,
-                        ),
-                        const SizedBox(height: 24),
-                        _buildColumn(
-                          context,
-                          'Hoàn thành',
-                          'done',
-                          state.tasks,
-                          Colors.teal,
-                        ),
-                        const SizedBox(height: 60), // Space for FAB
-                      ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildColumn(
+                      context,
+                      'Cần làm',
+                      'todo',
+                      state.tasks,
+                      Colors.blueAccent,
                     ),
-                  ),
+                    const SizedBox(height: 24),
+                    _buildColumn(
+                      context,
+                      'Đang làm',
+                      'doing',
+                      state.tasks,
+                      Colors.orangeAccent,
+                    ),
+                    const SizedBox(height: 24),
+                    _buildColumn(
+                      context,
+                      'Hoàn thành',
+                      'done',
+                      state.tasks,
+                      Colors.teal,
+                    ),
+                    const SizedBox(height: 60),
+                  ],
                 ),
               );
             },
@@ -464,10 +445,10 @@ class _BoardScreenState extends State<BoardScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
             decoration: BoxDecoration(
               color: isHovering
-                  ? accentColor.withValues(alpha: 0.2)
+                  ? accentColor.withOpacity(0.2)
                   : (isSelected
-                        ? accentColor.withValues(alpha: 0.1)
-                        : Colors.transparent),
+                      ? accentColor.withOpacity(0.1)
+                      : Colors.transparent),
               border: Border(
                 left: BorderSide(
                   color: isHovering || isSelected
@@ -508,7 +489,7 @@ class _BoardScreenState extends State<BoardScreen> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.1),
+                    color: accentColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -557,9 +538,8 @@ class _BoardScreenState extends State<BoardScreen> {
 
         return AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          color: isHovering
-              ? accentColor.withValues(alpha: 0.05)
-              : Colors.transparent,
+          color:
+              isHovering ? accentColor.withOpacity(0.05) : Colors.transparent,
           child: tasks.isEmpty
               ? Center(
                   child: Column(
@@ -586,7 +566,7 @@ class _BoardScreenState extends State<BoardScreen> {
                   padding: const EdgeInsets.all(24),
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 400,
-                    mainAxisExtent: 140, // Fixed height for task cards
+                    mainAxisExtent: 140,
                     crossAxisSpacing: 20,
                     mainAxisSpacing: 20,
                   ),
@@ -648,19 +628,19 @@ class _BoardScreenState extends State<BoardScreen> {
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.9),
+            color: Colors.white.withOpacity(0.9),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isHovering
-                  ? accentColor.withValues(alpha: 0.8)
-                  : Colors.grey.withValues(alpha: 0.1),
+                  ? accentColor.withOpacity(0.8)
+                  : Colors.grey.withOpacity(0.1),
               width: isHovering ? 2 : 1,
             ),
             boxShadow: [
               BoxShadow(
                 color: isHovering
-                    ? accentColor.withValues(alpha: 0.2)
-                    : Colors.black.withValues(alpha: 0.03),
+                    ? accentColor.withOpacity(0.2)
+                    : Colors.black.withOpacity(0.03),
                 blurRadius: 15,
                 offset: const Offset(0, 6),
               ),
@@ -704,7 +684,7 @@ class _BoardScreenState extends State<BoardScreen> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.1),
+                  color: accentColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -723,7 +703,7 @@ class _BoardScreenState extends State<BoardScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 24),
                     decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.05),
+                      color: Colors.grey.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Center(
@@ -775,10 +755,10 @@ class _BoardScreenState extends State<BoardScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
+        border: Border.all(color: Colors.grey.withOpacity(0.15)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
+            color: Colors.black.withOpacity(0.02),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -794,7 +774,7 @@ class _BoardScreenState extends State<BoardScreen> {
               decoration: BoxDecoration(
                 border: Border(left: BorderSide(color: accentColor, width: 4)),
                 gradient: LinearGradient(
-                  colors: [Colors.white, accentColor.withValues(alpha: 0.02)],
+                  colors: [Colors.white, accentColor.withOpacity(0.02)],
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 ),
@@ -818,13 +798,13 @@ class _BoardScreenState extends State<BoardScreen> {
                       ),
                       InkWell(
                         onTap: () => context.read<TaskBloc>().add(
-                          DeleteTaskEvent(task.id),
-                        ),
+                              DeleteTaskEvent(task.id),
+                            ),
                         borderRadius: BorderRadius.circular(8),
                         child: Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
-                            color: Colors.red.withValues(alpha: 0.05),
+                            color: Colors.red.withOpacity(0.05),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: const Icon(
@@ -859,7 +839,7 @@ class _BoardScreenState extends State<BoardScreen> {
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: accentColor.withValues(alpha: 0.1),
+                          color: accentColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -919,7 +899,7 @@ class _BoardScreenState extends State<BoardScreen> {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             content: SizedBox(
-              width: 400, // Định hình chiều rộng tối đa
+              width: 400,
               child: TextField(
                 controller: titleController,
                 decoration: InputDecoration(
@@ -1031,7 +1011,7 @@ class _BoardScreenState extends State<BoardScreen> {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             content: SizedBox(
-              width: 400, // Cố định chiều rộng để form không bị bóp méo
+              width: 400,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1093,7 +1073,7 @@ class _BoardScreenState extends State<BoardScreen> {
                   backgroundColor: Colors.blueAccent,
                   foregroundColor: Colors.white,
                   elevation: 4,
-                  shadowColor: Colors.blueAccent.withValues(alpha: 0.4),
+                  shadowColor: Colors.blueAccent.withOpacity(0.4),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -1106,13 +1086,6 @@ class _BoardScreenState extends State<BoardScreen> {
       ),
     );
   }
-}
-
-@Preview(name: 'Full Dashboard')
-Widget previewEmptyDashboardView() {
-  return Scaffold(
-    body: DashboardView(onBoardSelected: (_) {}, onAddBoard: () {}),
-  );
 }
 
 class DashboardView extends StatelessWidget {
@@ -1140,7 +1113,6 @@ class DashboardView extends StatelessWidget {
             children: [
               CustomScrollView(
                 slivers: [
-                  // 1. Header Section with Image Background
                   SliverToBoxAdapter(
                     child: Stack(
                       children: [
@@ -1162,8 +1134,8 @@ class DashboardView extends StatelessWidget {
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
                               colors: [
-                                Colors.black.withValues(alpha: 0.1),
-                                Colors.white.withValues(alpha: 0.95),
+                                Colors.black.withOpacity(0.1),
+                                Colors.white.withOpacity(0.95),
                               ],
                             ),
                           ),
@@ -1235,8 +1207,6 @@ class DashboardView extends StatelessWidget {
                       ],
                     ),
                   ),
-
-                  // 2. Project List Header
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(24, 32, 24, 20),
                     sliver: SliverToBoxAdapter(
@@ -1257,8 +1227,6 @@ class DashboardView extends StatelessWidget {
                       ),
                     ),
                   ),
-
-                  // 3. Grid of Projects
                   if (boards.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
@@ -1290,11 +1258,11 @@ class DashboardView extends StatelessWidget {
                       sliver: SliverGrid(
                         gridDelegate:
                             const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 400,
-                              mainAxisSpacing: 24,
-                              crossAxisSpacing: 24,
-                              mainAxisExtent: 240,
-                            ),
+                          maxCrossAxisExtent: 400,
+                          mainAxisSpacing: 24,
+                          crossAxisSpacing: 24,
+                          mainAxisExtent: 240,
+                        ),
                         delegate: SliverChildBuilderDelegate(
                           (context, index) =>
                               _buildProjectCard(context, boards[index]),
@@ -1302,12 +1270,9 @@ class DashboardView extends StatelessWidget {
                         ),
                       ),
                     ),
-
                   const SliverToBoxAdapter(child: SizedBox(height: 120)),
                 ],
               ),
-
-              // 4. Floating Action Button
               Positioned(bottom: 32, right: 32, child: _buildFAB()),
             ],
           ),
@@ -1334,7 +1299,7 @@ class DashboardView extends StatelessWidget {
           borderRadius: BorderRadius.circular(32),
           boxShadow: [
             BoxShadow(
-              color: color.withValues(alpha: 0.08),
+              color: color.withOpacity(0.08),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -1349,7 +1314,7 @@ class DashboardView extends StatelessWidget {
                 width: 120,
                 height: 120,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.05),
+                  color: color.withOpacity(0.05),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -1365,7 +1330,7 @@ class DashboardView extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.1),
+                          color: color.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Icon(
@@ -1424,7 +1389,7 @@ class DashboardView extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1E3A8A).withValues(alpha: 0.15),
+            color: const Color(0xFF1E3A8A).withOpacity(0.15),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
@@ -1467,7 +1432,7 @@ class DashboardView extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.9),
+        color: Colors.white.withOpacity(0.9),
         shape: BoxShape.circle,
         boxShadow: const [
           BoxShadow(
@@ -1556,12 +1521,12 @@ class TaskDetailDialog extends StatelessWidget {
       child: Container(
         constraints: const BoxConstraints(maxWidth: 650),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.95),
+          color: Colors.white.withOpacity(0.95),
           borderRadius: BorderRadius.circular(32),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
+          border: Border.all(color: Colors.white.withOpacity(0.5)),
           boxShadow: [
             BoxShadow(
-              color: accentColor.withValues(alpha: 0.15),
+              color: accentColor.withOpacity(0.15),
               blurRadius: 40,
               offset: const Offset(0, 20),
             ),
@@ -1573,7 +1538,6 @@ class TaskDetailDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Image Header
               Stack(
                 children: [
                   Container(
@@ -1583,7 +1547,7 @@ class TaskDetailDialog extends StatelessWidget {
                       gradient: LinearGradient(
                         colors: [
                           accentColor,
-                          accentColor.withValues(alpha: 0.7),
+                          accentColor.withOpacity(0.7),
                         ],
                       ),
                     ),
@@ -1593,7 +1557,7 @@ class TaskDetailDialog extends StatelessWidget {
                         'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?q=80&w=1000&auto=format&fit=crop',
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Container(
-                          color: accentColor.withValues(alpha: 0.3),
+                          color: accentColor.withOpacity(0.3),
                         ),
                       ),
                     ),
@@ -1628,7 +1592,7 @@ class TaskDetailDialog extends StatelessWidget {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
+                            color: Colors.black.withOpacity(0.1),
                             blurRadius: 10,
                           ),
                         ],
@@ -1755,7 +1719,7 @@ class TaskDetailDialog extends StatelessWidget {
                               backgroundColor: accentColor,
                               foregroundColor: Colors.white,
                               elevation: 8,
-                              shadowColor: accentColor.withValues(alpha: 0.4),
+                              shadowColor: accentColor.withOpacity(0.4),
                               padding: const EdgeInsets.symmetric(vertical: 18),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
