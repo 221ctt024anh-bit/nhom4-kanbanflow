@@ -2,18 +2,13 @@ import '../../domain/entities/task.dart';
 
 class TaskModel extends Task {
   const TaskModel({
-    required String id,
-    required String boardId,
-    required String title,
-    required String description,
-    required String status,
-  }) : super(
-         id: id,
-         boardId: boardId,
-         title: title,
-         description: description,
-         status: status,
-       );
+    required super.id,
+    required super.boardId,
+    required super.title,
+    required super.description,
+    required super.status,
+    required super.createdAt,
+  });
 
   // Chuyển từ SQLite (Map) sang Model
   factory TaskModel.fromMap(Map<String, dynamic> map) {
@@ -23,6 +18,8 @@ class TaskModel extends Task {
       title: map['title'] as String,
       description: map['description'] as String,
       status: map['status'] as String,
+      createdAt:
+          (map['createdAt'] as String?) ?? DateTime.now().toIso8601String(),
     );
   }
 
@@ -34,6 +31,7 @@ class TaskModel extends Task {
       'title': title,
       'description': description,
       'status': status,
+      'createdAt': createdAt,
     };
   }
 }

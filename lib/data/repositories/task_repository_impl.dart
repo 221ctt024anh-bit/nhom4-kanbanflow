@@ -32,6 +32,7 @@ class TaskRepositoryImpl implements TaskRepository {
       title: task.title,
       description: task.description,
       status: task.status,
+      createdAt: task.createdAt,
     );
     await localDatabase.insertTask(taskModel);
   }
@@ -44,6 +45,7 @@ class TaskRepositoryImpl implements TaskRepository {
       title: task.title,
       description: task.description,
       status: task.status,
+      createdAt: task.createdAt,
     );
     await localDatabase.updateTask(taskModel);
   }

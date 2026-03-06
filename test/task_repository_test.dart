@@ -44,6 +44,7 @@ void main() {
     title: 'Học Flutter',
     description: 'Làm đồ án',
     status: 'todo',
+    createdAt: '2026-03-04T12:00:00Z',
   );
   final tTaskUpdated = Task(
     id: '1',
@@ -51,6 +52,7 @@ void main() {
     title: 'Học Flutter',
     description: 'Hoàn thành UI',
     status: 'done',
+    createdAt: '2026-03-04T12:00:00Z',
   );
 
   group('TaskRepository Tests', () {

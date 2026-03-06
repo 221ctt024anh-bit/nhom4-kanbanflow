@@ -29,7 +29,11 @@ class LocalDatabase {
       databaseFactory = databaseFactoryFfiWeb;
       return await databaseFactory.openDatabase(
         filePath,
-        options: OpenDatabaseOptions(version: 1, onCreate: _createDB),
+        options: OpenDatabaseOptions(
+          version: 2,
+          onCreate: _createDB,
+          onUpgrade: _onUpgrade,
+        ),
       );
     }
 
@@ -44,7 +48,12 @@ class LocalDatabase {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(path, version: 1, onCreate: _createDB);
+    return await openDatabase(
+      path,
+      version: 2,
+      onCreate: _createDB,
+      onUpgrade: _onUpgrade,
+    );
   }
 
   Future _createDB(Database db, int version) async {
@@ -62,9 +71,19 @@ class LocalDatabase {
         title TEXT NOT NULL,
         description TEXT NOT NULL,
         status TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
         FOREIGN KEY (boardId) REFERENCES boards (id) ON DELETE CASCADE
       )
     ''');
+  }
+
+  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Thêm cột createdAt vào bảng tasks cho các database cũ
+      await db.execute(
+        'ALTER TABLE tasks ADD COLUMN createdAt TEXT NOT NULL DEFAULT ""',
+      );
+    }
   }
 
   Future<List<TaskModel>> getTasks({

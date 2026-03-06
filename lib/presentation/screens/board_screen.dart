@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/widget_previews.dart';
 import '../blocs/task_bloc.dart';
@@ -134,12 +135,25 @@ class _BoardScreenState extends State<BoardScreen> {
             ),
             const SizedBox(width: 8),
           ],
+          leading: selectedBoardId != null
+              ? IconButton(
+                  icon: const Icon(Icons.home_rounded),
+                  tooltip: 'Về trang chủ',
+                  onPressed: () {
+                    setState(() {
+                      selectedBoardId = null;
+                      isSearching = false;
+                      searchController.clear();
+                    });
+                  },
+                )
+              : null,
         ),
-        drawer: _buildDrawer(context),
+        drawer: selectedBoardId == null ? _buildDrawer(context) : null,
         body: selectedBoardId == null
-            ? EmptyDashboardView(
+            ? DashboardView(
+                onBoardSelected: _selectBoard,
                 onAddBoard: () => _showAddBoardDialog(context),
-                onOpenMenu: () => Scaffold.of(context).openDrawer(),
               )
             : _buildBoardContent(context),
         floatingActionButton: selectedBoardId == null
@@ -213,7 +227,7 @@ class _BoardScreenState extends State<BoardScreen> {
                   return ListView.separated(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     itemCount: boards.length,
-                    separatorBuilder: (_, __) =>
+                    separatorBuilder: (_, _) =>
                         const Divider(height: 1, indent: 24, endIndent: 24),
                     itemBuilder: (context, index) {
                       final board = boards[index];
@@ -239,7 +253,7 @@ class _BoardScreenState extends State<BoardScreen> {
                           ),
                         ),
                         selected: isSelected,
-                        selectedTileColor: Colors.blue.withOpacity(0.05),
+                        selectedTileColor: Colors.blue.withValues(alpha: 0.05),
                         onTap: () {
                           _selectBoard(board.id);
                           Navigator.pop(context); // Close drawer
@@ -274,7 +288,7 @@ class _BoardScreenState extends State<BoardScreen> {
               label: const Text('Thêm Bảng Mới'),
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(50),
-                backgroundColor: Colors.blue.withOpacity(0.1),
+                backgroundColor: Colors.blue.withValues(alpha: 0.1),
                 foregroundColor: Colors.blueAccent,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -341,7 +355,10 @@ class _BoardScreenState extends State<BoardScreen> {
                       ),
                     ),
                     // Kẻ dọc phân cách
-                    Container(width: 1, color: Colors.grey.withOpacity(0.2)),
+                    Container(
+                      width: 1,
+                      color: Colors.grey.withValues(alpha: 0.2),
+                    ),
                     // Khu vực chứa thẻ bên phải
                     Expanded(
                       child: Container(
@@ -429,6 +446,7 @@ class _BoardScreenState extends State<BoardScreen> {
           title: droppedTask.title,
           description: droppedTask.description,
           status: status,
+          createdAt: droppedTask.createdAt,
         );
         context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
       },
@@ -446,9 +464,9 @@ class _BoardScreenState extends State<BoardScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
             decoration: BoxDecoration(
               color: isHovering
-                  ? accentColor.withOpacity(0.2)
+                  ? accentColor.withValues(alpha: 0.2)
                   : (isSelected
-                        ? accentColor.withOpacity(0.1)
+                        ? accentColor.withValues(alpha: 0.1)
                         : Colors.transparent),
               border: Border(
                 left: BorderSide(
@@ -490,7 +508,7 @@ class _BoardScreenState extends State<BoardScreen> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: accentColor.withOpacity(0.1),
+                    color: accentColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -530,6 +548,7 @@ class _BoardScreenState extends State<BoardScreen> {
           title: droppedTask.title,
           description: droppedTask.description,
           status: status,
+          createdAt: droppedTask.createdAt,
         );
         context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
       },
@@ -539,7 +558,7 @@ class _BoardScreenState extends State<BoardScreen> {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           color: isHovering
-              ? accentColor.withOpacity(0.05)
+              ? accentColor.withValues(alpha: 0.05)
               : Colors.transparent,
           child: tasks.isEmpty
               ? Center(
@@ -620,6 +639,7 @@ class _BoardScreenState extends State<BoardScreen> {
           title: droppedTask.title,
           description: droppedTask.description,
           status: status,
+          createdAt: droppedTask.createdAt,
         );
         context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
       },
@@ -628,21 +648,21 @@ class _BoardScreenState extends State<BoardScreen> {
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            color: Colors.white.withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isHovering
-                  ? accentColor.withOpacity(0.8)
-                  : Colors.grey.withOpacity(0.2),
+                  ? accentColor.withValues(alpha: 0.8)
+                  : Colors.grey.withValues(alpha: 0.1),
               width: isHovering ? 2 : 1,
             ),
             boxShadow: [
               BoxShadow(
                 color: isHovering
-                    ? accentColor.withOpacity(0.15)
-                    : Colors.black.withOpacity(0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                    ? accentColor.withValues(alpha: 0.2)
+                    : Colors.black.withValues(alpha: 0.03),
+                blurRadius: 15,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
@@ -684,7 +704,7 @@ class _BoardScreenState extends State<BoardScreen> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: accentColor.withOpacity(0.1),
+                  color: accentColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -703,7 +723,7 @@ class _BoardScreenState extends State<BoardScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 24),
                     decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.05),
+                      color: Colors.grey.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Center(
@@ -755,10 +775,10 @@ class _BoardScreenState extends State<BoardScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.15)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -769,10 +789,15 @@ class _BoardScreenState extends State<BoardScreen> {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () {},
+            onTap: () => _showTaskDetail(context, task, accentColor),
             child: Container(
               decoration: BoxDecoration(
-                border: Border(left: BorderSide(color: accentColor, width: 3)),
+                border: Border(left: BorderSide(color: accentColor, width: 4)),
+                gradient: LinearGradient(
+                  colors: [Colors.white, accentColor.withValues(alpha: 0.02)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
               ),
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -785,9 +810,9 @@ class _BoardScreenState extends State<BoardScreen> {
                         child: Text(
                           task.title,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                            color: Colors.black87,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            color: Color(0xFF1E293B),
                           ),
                         ),
                       ),
@@ -796,36 +821,86 @@ class _BoardScreenState extends State<BoardScreen> {
                           DeleteTaskEvent(task.id),
                         ),
                         borderRadius: BorderRadius.circular(8),
-                        child: const Padding(
-                          padding: EdgeInsets.all(4.0),
-                          child: Icon(
-                            Icons.close,
-                            color: Colors.black26,
-                            size: 18,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.redAccent,
+                            size: 16,
                           ),
                         ),
                       ),
                     ],
                   ),
                   if (task.description.isNotEmpty) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Text(
                       task.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: Colors.black54,
+                        color: Color(0xFF64748B),
                         fontSize: 13,
-                        height: 1.4,
+                        height: 1.5,
                       ),
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: accentColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          _formatDate(task.createdAt),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: accentColor,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.access_time_rounded,
+                        size: 14,
+                        color: Colors.grey[400],
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  String _formatDate(String isoString) {
+    try {
+      final date = DateTime.parse(isoString);
+      return '${date.day}/${date.month} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
+  void _showTaskDetail(BuildContext context, Task task, Color accentColor) {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          TaskDetailDialog(task: task, accentColor: accentColor),
     );
   }
 
@@ -1009,6 +1084,7 @@ class _BoardScreenState extends State<BoardScreen> {
                     title: titleController.text.trim(),
                     description: descController.text.trim(),
                     status: 'todo',
+                    createdAt: DateTime.now().toIso8601String(),
                   );
                   context.read<TaskBloc>().add(AddTaskEvent(task));
                   Navigator.pop(context);
@@ -1016,8 +1092,10 @@ class _BoardScreenState extends State<BoardScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blueAccent,
                   foregroundColor: Colors.white,
+                  elevation: 4,
+                  shadowColor: Colors.blueAccent.withValues(alpha: 0.4),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 child: const Text('Thêm công việc'),
@@ -1033,203 +1111,348 @@ class _BoardScreenState extends State<BoardScreen> {
 @Preview(name: 'Full Dashboard')
 Widget previewEmptyDashboardView() {
   return Scaffold(
-    body: EmptyDashboardView(onAddBoard: () {}, onOpenMenu: () {}),
+    body: DashboardView(onBoardSelected: (_) {}, onAddBoard: () {}),
   );
 }
 
-class EmptyDashboardView extends StatelessWidget {
+class DashboardView extends StatelessWidget {
+  final Function(String) onBoardSelected;
   final VoidCallback onAddBoard;
-  final VoidCallback onOpenMenu;
 
-  const EmptyDashboardView({
+  const DashboardView({
     super.key,
+    required this.onBoardSelected,
     required this.onAddBoard,
-    required this.onOpenMenu,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFFF8FAFC), Color(0xFFEFF6FF)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-      ),
-      child: Center(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
+    return BlocBuilder<BoardBloc, BoardState>(
+      builder: (context, state) {
+        List<Board> boards = [];
+        if (state is BoardLoaded) {
+          boards = state.boards;
+        }
+
+        return Container(
+          color: const Color(0xFFF8FAFC),
+          child: Stack(
             children: [
-              // Biểu tượng tổng quan
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.blueAccent.withOpacity(0.15),
-                      blurRadius: 40,
-                      offset: const Offset(0, 15),
+              CustomScrollView(
+                slivers: [
+                  // 1. Header Section with Image Background
+                  SliverToBoxAdapter(
+                    child: Stack(
+                      children: [
+                        SizedBox(
+                          height: 250,
+                          width: double.infinity,
+                          child: ClipRRect(
+                            child: Image.network(
+                              'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1200&auto=format&fit=crop',
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          height: 250,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.1),
+                                Colors.white.withValues(alpha: 0.95),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 30,
+                          left: 24,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Không Gian Làm Việc',
+                                style: TextStyle(
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF1E3A8A),
+                                  letterSpacing: -1.5,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                width: 60,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: Colors.blueAccent,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Positioned(
+                          top: 48,
+                          right: 24,
+                          child: Row(
+                            children: [
+                              _buildHeaderIconButton(
+                                Icons.notifications_outlined,
+                              ),
+                              const SizedBox(width: 12),
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF1E3A8A),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black12,
+                                      blurRadius: 10,
+                                      offset: Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: const Center(
+                                  child: Text(
+                                    'HA',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.dashboard_customize_rounded,
-                  size: 70,
-                  color: Colors.blueAccent.shade400,
-                ),
-              ),
-              const SizedBox(height: 32),
-              // Tiêu đề
-              const Text(
-                'Tổng Quan KanbanFlow',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF1E293B),
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 12),
-              // Mô tả
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 40),
-                child: Text(
-                  'Không gian làm việc của bạn đang trống. Hãy bắt đầu kiến tạo quy trình làm việc thông minh ngay bây giờ.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Color(0xFF64748B),
-                    height: 1.5,
                   ),
-                ),
-              ),
-              const SizedBox(height: 48),
-              // Mạng lưới các nút tương tác (Action Cards)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Wrap(
-                  spacing: 20,
-                  runSpacing: 20,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    // Nút: Tạo Bảng Mới
-                    DashboardActionCard(
-                      title: 'Tạo Bảng Mới',
-                      subtitle: 'Bắt đầu dự án mới ngay',
-                      icon: Icons.add_chart_rounded,
-                      gradientColors: const [
-                        Colors.blueAccent,
-                        Colors.lightBlue,
-                      ],
-                      onTap: onAddBoard,
+
+                  // 2. Project List Header
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 20),
+                    sliver: SliverToBoxAdapter(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'DỰ ÁN CỦA BẠN',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF64748B),
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          _buildSortBadge(),
+                        ],
+                      ),
                     ),
-                    // Nút: Mở Menu Bảng
-                    DashboardActionCard(
-                      title: 'Quản Lý Bảng',
-                      subtitle: 'Xem các bảng hiện tại',
-                      icon: Icons.menu_open_rounded,
-                      gradientColors: const [
-                        Colors.indigo,
-                        Colors.indigoAccent,
-                      ],
-                      onTap: onOpenMenu,
+                  ),
+
+                  // 3. Grid of Projects
+                  if (boards.isEmpty)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.auto_awesome_motion_rounded,
+                              size: 80,
+                              color: Colors.grey[200],
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              'Chưa có dự án nào khả dụng',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.grey[400],
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      sliver: SliverGrid(
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 400,
+                              mainAxisSpacing: 24,
+                              crossAxisSpacing: 24,
+                              mainAxisExtent: 240,
+                            ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) =>
+                              _buildProjectCard(context, boards[index]),
+                          childCount: boards.length,
+                        ),
+                      ),
                     ),
-                  ],
-                ),
+
+                  const SliverToBoxAdapter(child: SizedBox(height: 120)),
+                ],
               ),
-              const SizedBox(height: 60), // Khoảng trống dưới cùng
+
+              // 4. Floating Action Button
+              Positioned(bottom: 32, right: 32, child: _buildFAB()),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildProjectCard(BuildContext context, Board board) {
+    final List<Color> cardColors = [
+      Colors.indigo,
+      Colors.teal,
+      Colors.deepOrange,
+      Colors.purple,
+      Colors.blue,
+    ];
+    final color = cardColors[board.id.hashCode % cardColors.length];
+
+    return GestureDetector(
+      onTap: () => onBoardSelected(board.id),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              bottom: -20,
+              right: -20,
+              child: Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.05),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(
+                          Icons.grid_view_rounded,
+                          color: color,
+                          size: 26,
+                        ),
+                      ),
+                      Icon(
+                        Icons.more_vert_rounded,
+                        color: Colors.grey[300],
+                        size: 24,
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Text(
+                    board.title,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.access_time_filled_rounded,
+                        size: 14,
+                        color: Colors.grey[300],
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Cập nhật: ${_timeAgo(board.createdAt)}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[400],
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
-}
 
-class DashboardActionCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final List<Color> gradientColors;
-  final VoidCallback onTap;
-
-  const DashboardActionCard({
-    super.key,
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.gradientColors,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildFAB() {
     return Container(
-      width: 260,
       decoration: BoxDecoration(
-        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: gradientColors.first.withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: const Color(0xFF1E3A8A).withValues(alpha: 0.15),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Material(
-        color: Colors.transparent,
+        color: const Color(0xFFE0E7FF),
+        borderRadius: BorderRadius.circular(20),
         child: InkWell(
+          onTap: onAddBoard,
           borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
-          splashColor: gradientColors.first.withOpacity(0.1),
-          highlightColor: gradientColors.first.withOpacity(0.05),
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: gradientColors,
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(icon, color: Colors.white, size: 28),
+                const Icon(
+                  Icons.add_box_rounded,
+                  color: Color(0xFF1E3A8A),
+                  size: 24,
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF64748B),
-                        ),
-                      ),
-                    ],
+                const SizedBox(width: 12),
+                const Text(
+                  'Thêm Dự Án',
+                  style: TextStyle(
+                    color: Color(0xFF1E3A8A),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 17,
                   ),
                 ),
               ],
@@ -1238,5 +1461,326 @@ class DashboardActionCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildHeaderIconButton(IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.9),
+        shape: BoxShape.circle,
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Icon(icon, color: const Color(0xFF1E3A8A), size: 24),
+    );
+  }
+
+  Widget _buildSortBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: const Row(
+        children: [
+          Text(
+            'Mới nhất',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF64748B),
+            ),
+          ),
+          SizedBox(width: 4),
+          Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 18,
+            color: Color(0xFF64748B),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _timeAgo(String isoString) {
+    try {
+      final date = DateTime.parse(isoString);
+      final diff = DateTime.now().difference(date);
+      if (diff.inMinutes < 1) return 'vừa xong';
+      if (diff.inMinutes < 60) return '${diff.inMinutes} phút trước';
+      if (diff.inHours < 24) return '${diff.inHours} giờ trước';
+      return '${diff.inDays} ngày trước';
+    } catch (e) {
+      return 'mới đây';
+    }
+  }
+}
+
+class TaskDetailDialog extends StatelessWidget {
+  final Task task;
+  final Color accentColor;
+
+  const TaskDetailDialog({
+    super.key,
+    required this.task,
+    required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    String statusText = '';
+    switch (task.status) {
+      case 'todo':
+        statusText = 'Cần làm';
+        break;
+      case 'doing':
+        statusText = 'Đang làm';
+        break;
+      case 'done':
+        statusText = 'Hoàn thành';
+        break;
+    }
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 650),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.95),
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
+          boxShadow: [
+            BoxShadow(
+              color: accentColor.withValues(alpha: 0.15),
+              blurRadius: 40,
+              offset: const Offset(0, 20),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Image Header
+              Stack(
+                children: [
+                  Container(
+                    height: 200,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          accentColor,
+                          accentColor.withValues(alpha: 0.7),
+                        ],
+                      ),
+                    ),
+                    child: Opacity(
+                      opacity: 0.6,
+                      child: Image.network(
+                        'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?q=80&w=1000&auto=format&fit=crop',
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: accentColor.withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 16,
+                    right: 16,
+                    child: IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white,
+                      ),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black26,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 24,
+                    left: 24,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 10,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: accentColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            statusText,
+                            style: TextStyle(
+                              color: accentColor,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.title,
+                      style: const TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0F172A),
+                        letterSpacing: -1,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today_rounded,
+                          size: 16,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Tạo lúc: ${_formatFullDate(task.createdAt)}',
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    const Text(
+                      'CHI TIẾT CÔNG VIỆC',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.blueAccent,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: Text(
+                        task.description.isNotEmpty
+                            ? task.description
+                            : 'Chưa có mô tả chi tiết cho nhiệm vụ này.',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: const Color(0xFF334155),
+                          height: 1.7,
+                          fontStyle: task.description.isEmpty
+                              ? FontStyle.italic
+                              : FontStyle.normal,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 48),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: Colors.black87,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: BorderSide(color: Colors.grey[200]!),
+                              ),
+                            ),
+                            child: const Text(
+                              'Đóng cửa sổ',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.edit_note_rounded),
+                            label: const Text('Chỉnh sửa'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: accentColor,
+                              foregroundColor: Colors.white,
+                              elevation: 8,
+                              shadowColor: accentColor.withValues(alpha: 0.4),
+                              padding: const EdgeInsets.symmetric(vertical: 18),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatFullDate(String isoString) {
+    try {
+      final date = DateTime.parse(isoString);
+      return '${date.day} Tháng ${date.month}, ${date.year} lúc ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return isoString;
+    }
   }
 }

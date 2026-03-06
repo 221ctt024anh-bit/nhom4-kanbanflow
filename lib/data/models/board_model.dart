@@ -2,10 +2,10 @@ import '../../domain/entities/board.dart';
 
 class BoardModel extends Board {
   const BoardModel({
-    required String id,
-    required String title,
-    required String createdAt,
-  }) : super(id: id, title: title, createdAt: createdAt);
+    required super.id,
+    required super.title,
+    required super.createdAt,
+  });
 
   factory BoardModel.fromMap(Map<String, dynamic> map) {
     return BoardModel(
