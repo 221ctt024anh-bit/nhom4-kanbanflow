@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../app_preferences.dart';
 
 import '../blocs/auth/auth_bloc.dart';
 import '../blocs/auth/auth_event.dart';
@@ -26,30 +27,42 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui long nhap day du thong tin')),
+        SnackBar(
+          content: Text(
+            AppPreferences.tr(
+              'Vui lòng nhập đầy đủ thông tin',
+              'Please enter all information',
+            ),
+          ),
+        ),
       );
     }
   }
 
   Future<void> _showForgotPasswordDialog() async {
-    final emailController = TextEditingController(text: _emailController.text.trim());
+    final emailController = TextEditingController(
+      text: _emailController.text.trim(),
+    );
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Quen mat khau'),
+          title: Text(AppPreferences.tr('Quên mật khẩu', 'Forgot password')),
           content: TextField(
             controller: emailController,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              hintText: 'Nhap email tai khoan',
+            decoration: InputDecoration(
+              labelText: AppPreferences.tr('Email', 'Email'),
+              hintText: AppPreferences.tr(
+                'Nhập email tài khoản',
+                'Enter account email',
+              ),
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Huy'),
+              child: Text(AppPreferences.tr('Hủy', 'Cancel')),
             ),
             ElevatedButton(
               onPressed: () {
@@ -59,7 +72,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 ).hasMatch(email);
                 if (!isValidEmail) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Email khong hop le')),
+                    SnackBar(
+                      content: Text(
+                        AppPreferences.tr(
+                          'Email không hợp lệ',
+                          'Email is invalid',
+                        ),
+                      ),
+                    ),
                   );
                   return;
                 }
@@ -68,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 );
                 Navigator.pop(dialogContext);
               },
-              child: const Text('Gửi liên kết'),
+              child: Text(AppPreferences.tr('Gửi liên kết', 'Send link')),
             ),
           ],
         );
@@ -111,8 +131,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: Colors.blueAccent,
                     ),
                     const SizedBox(height: 24),
-                    const Text(
-                      'Chao mung tro lai',
+                    Text(
+                      AppPreferences.tr('Chào mừng trở lại', 'Welcome back'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 28,
@@ -120,8 +140,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Đăng nhập để vào KanbanFlow',
+                    Text(
+                      AppPreferences.tr(
+                        'Đăng nhập để vào TaskMate',
+                        'Login to access TaskMate',
+                      ),
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 16, color: Colors.grey),
                     ),
@@ -129,7 +152,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextField(
                       controller: _emailController,
                       decoration: InputDecoration(
-                        labelText: 'Email',
+                        labelText: AppPreferences.tr('Email', 'Email'),
                         prefixIcon: const Icon(Icons.email),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -141,7 +164,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextField(
                       controller: _passwordController,
                       decoration: InputDecoration(
-                        labelText: 'Mat khau',
+                        labelText: AppPreferences.tr('Mật khẩu', 'Password'),
                         prefixIcon: const Icon(Icons.lock),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -154,7 +177,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: isLoading ? null : _showForgotPasswordDialog,
-                        child: const Text('Quen mat khau?'),
+                        child: Text(
+                          AppPreferences.tr(
+                            'Quên mật khẩu?',
+                            'Forgot password?',
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -170,9 +198,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       child: isLoading
                           ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              'Đăng nhập',
-                              style: TextStyle(
+                          : Text(
+                              AppPreferences.tr('Đăng nhập', 'Login'),
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -188,7 +216,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         );
                       },
-                      child: const Text('Chưa có tài khoản? Đăng ký ngay'),
+                      child: Text(
+                        AppPreferences.tr(
+                          'Chưa có tài khoản? Đăng ký ngay',
+                          "Don't have an account? Register now",
+                        ),
+                      ),
                     ),
                   ],
                 ),

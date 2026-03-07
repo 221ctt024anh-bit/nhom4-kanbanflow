@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../app_preferences.dart';
 
 import '../../data/repositories/friend_repository.dart';
 import '../../domain/entities/friend_request.dart';
@@ -54,7 +55,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
         _incomingRequests = results[1] as List<FriendRequest>;
       });
     } catch (e) {
-      _showSnack('Không tải được dữ liệu bạn bè: $e');
+      _showSnack(
+        '${AppPreferences.tr('Không tải được dữ liệu bạn bè', 'Failed to load friends')}: $e',
+      );
     } finally {
       if (mounted) {
         setState(() => _loading = false);
@@ -65,17 +68,23 @@ class _FriendsScreenState extends State<FriendsScreen> {
   Future<void> _sendRequest() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) {
-      _showSnack('Vui lòng nhập email.');
+      _showSnack(
+        AppPreferences.tr('Vui lòng nhập email.', 'Please enter an email.'),
+      );
       return;
     }
     setState(() => _sending = true);
     try {
       await _repo.sendFriendRequestByEmail(email);
       _emailController.clear();
-      _showSnack('Đã gửi lời mời kết bạn.');
+      _showSnack(
+        AppPreferences.tr('Đã gửi lời mời kết bạn.', 'Friend request sent.'),
+      );
       await _refresh();
     } catch (e) {
-      _showSnack('Không thể gửi lời mời: $e');
+      _showSnack(
+        '${AppPreferences.tr('Không thể gửi lời mời', 'Could not send request')}: $e',
+      );
     } finally {
       if (mounted) {
         setState(() => _sending = false);
@@ -86,10 +95,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
   Future<void> _respond(FriendRequest request, bool accept) async {
     try {
       await _repo.respondToRequest(requestId: request.id, accept: accept);
-      _showSnack(accept ? 'Đã chấp nhận lời mời.' : 'Đã từ chối lời mời.');
+      _showSnack(
+        accept
+            ? AppPreferences.tr('Đã chấp nhận lời mời.', 'Accepted invitation.')
+            : AppPreferences.tr('Đã từ chối lời mời.', 'Declined invitation.'),
+      );
       await _refresh();
     } catch (e) {
-      _showSnack('Không thể xử lý lời mời: $e');
+      _showSnack(
+        '${AppPreferences.tr('Không thể xử lý lời mời', 'Could not process invitation')}: $e',
+      );
     }
   }
 
@@ -102,12 +117,12 @@ class _FriendsScreenState extends State<FriendsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bạn bè'),
+        title: Text(AppPreferences.tr('Bạn bè', 'Friends')),
         actions: [
           IconButton(
             onPressed: _refresh,
             icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Làm mới',
+            tooltip: AppPreferences.tr('Làm mới', 'Refresh'),
           ),
         ],
       ),
@@ -128,7 +143,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   Widget _buildSendRequestCard() {
     return _sectionCard(
-      title: 'Kết bạn bằng email',
+      title: AppPreferences.tr('Kết bạn bằng email', 'Add friend by email'),
       icon: Icons.person_add_alt_1_rounded,
       child: Row(
         children: [
@@ -136,9 +151,12 @@ class _FriendsScreenState extends State<FriendsScreen> {
             child: TextField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                hintText: 'Nhập email người muốn kết bạn',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: AppPreferences.tr(
+                  'Nhập email người muốn kết bạn',
+                  'Enter email of person to friend',
+                ),
+                border: const OutlineInputBorder(),
               ),
             ),
           ),
@@ -151,7 +169,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Gửi'),
+                : Text(AppPreferences.tr('Gửi', 'Send')),
           ),
         ],
       ),
@@ -160,13 +178,14 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   Widget _buildIncomingRequestsCard() {
     return _sectionCard(
-      title: 'Lời mời đang chờ',
+      title: AppPreferences.tr('Lời mời đang chờ', 'Pending requests'),
       icon: Icons.mark_email_unread_outlined,
       child: _incomingRequests.isEmpty
-          ? const Text('Không có lời mời nào.')
+          ? Text(AppPreferences.tr('Không có lời mời nào.', 'No requests.'))
           : Column(
               children: _incomingRequests.map((request) {
-                final display = request.senderDisplayName ?? request.senderEmail;
+                final display =
+                    request.senderDisplayName ?? request.senderEmail;
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const CircleAvatar(child: Icon(Icons.person)),
@@ -177,11 +196,11 @@ class _FriendsScreenState extends State<FriendsScreen> {
                     children: [
                       OutlinedButton(
                         onPressed: () => _respond(request, false),
-                        child: const Text('Từ chối'),
+                        child: Text(AppPreferences.tr('Từ chối', 'Decline')),
                       ),
                       ElevatedButton(
                         onPressed: () => _respond(request, true),
-                        child: const Text('Chấp nhận'),
+                        child: Text(AppPreferences.tr('Chấp nhận', 'Accept')),
                       ),
                     ],
                   ),
@@ -193,10 +212,15 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   Widget _buildFriendsCard() {
     return _sectionCard(
-      title: 'Danh sách bạn bè',
+      title: AppPreferences.tr('Danh sách bạn bè', 'Friends List'),
       icon: Icons.group_outlined,
       child: _friends.isEmpty
-          ? const Text('Bạn chưa có bạn bè nào.')
+          ? Text(
+              AppPreferences.tr(
+                'Bạn chưa có bạn bè nào.',
+                'You have no friends yet.',
+              ),
+            )
           : Column(
               children: _friends.map((friend) {
                 return ListTile(
@@ -247,7 +271,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
                           ),
                           const SizedBox(width: 6),
                           Icon(
-                            friend.isOnline ? Icons.circle : Icons.schedule_rounded,
+                            friend.isOnline
+                                ? Icons.circle
+                                : Icons.schedule_rounded,
                             size: 12,
                             color: friend.isOnline
                                 ? Colors.green.shade600
@@ -259,7 +285,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   ),
                   trailing: IconButton(
                     icon: const Icon(Icons.chat_bubble_outline_rounded),
-                    tooltip: 'Chat',
+                    tooltip: AppPreferences.tr('Chat', 'Chat'),
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -276,15 +302,27 @@ class _FriendsScreenState extends State<FriendsScreen> {
   }
 
   String _buildStatusText(FriendUser friend) {
-    if (friend.isOnline) return 'Đang online';
+    if (friend.isOnline) return AppPreferences.tr('Đang trực tuyến', 'Online');
     final lastSeen = friend.lastSeenAt;
-    if (lastSeen == null) return 'Offline';
+    if (lastSeen == null) return AppPreferences.tr('Ngoại tuyến', 'Offline');
 
     final diff = DateTime.now().difference(lastSeen);
-    if (diff.inMinutes < 1) return 'Vừa hoạt động';
-    if (diff.inMinutes < 60) return 'Hoạt động ${diff.inMinutes} phút trước';
-    if (diff.inHours < 24) return 'Hoạt động ${diff.inHours} giờ trước';
-    return 'Hoạt động ${diff.inDays} ngày trước';
+    if (diff.inMinutes < 1)
+      return AppPreferences.tr('Vừa hoạt động', 'Just active');
+    if (diff.inMinutes < 60)
+      return AppPreferences.tr(
+        'Hoạt động ${diff.inMinutes} phút trước',
+        'Active ${diff.inMinutes} minutes ago',
+      );
+    if (diff.inHours < 24)
+      return AppPreferences.tr(
+        'Hoạt động ${diff.inHours} giờ trước',
+        'Active ${diff.inHours} hours ago',
+      );
+    return AppPreferences.tr(
+      'Hoạt động ${diff.inDays} ngày trước',
+      'Active ${diff.inDays} days ago',
+    );
   }
 
   Widget _sectionCard({

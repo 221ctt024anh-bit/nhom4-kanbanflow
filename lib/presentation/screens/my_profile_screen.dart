@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../app_preferences.dart';
 
 class MyProfileScreen extends StatefulWidget {
   const MyProfileScreen({super.key});
@@ -38,7 +39,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
           .maybeSingle();
       if (!mounted) return;
       setState(() {
-        _displayName = (profile?['display_name'] as String?) ??
+        _displayName =
+            (profile?['display_name'] as String?) ??
             (user.email?.split('@').first ?? 'User');
         _email = (profile?['email'] as String?) ?? (user.email ?? '');
         _avatarUrl = profile?['avatar_url'] as String?;
@@ -58,7 +60,9 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Trang ca nhan')),
+      appBar: AppBar(
+        title: Text(AppPreferences.tr('Trang cá nhân', 'Profile')),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -76,8 +80,9 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                       CircleAvatar(
                         radius: 42,
                         backgroundColor: Colors.blueAccent.withOpacity(0.15),
-                        backgroundImage:
-                            _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+                        backgroundImage: _avatarUrl != null
+                            ? NetworkImage(_avatarUrl!)
+                            : null,
                         child: _avatarUrl == null
                             ? Text(
                                 _displayName.isEmpty
@@ -120,7 +125,9 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                           await _loadProfile();
                         },
                         icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Chinh sua ho so'),
+                        label: Text(
+                          AppPreferences.tr('Chỉnh sửa hồ sơ', 'Edit profile'),
+                        ),
                       ),
                     ],
                   ),
@@ -130,4 +137,3 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     );
   }
 }
-

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../app_preferences.dart';
 
 import '../../domain/entities/friend_user.dart';
 import 'chat_screen.dart';
@@ -30,20 +31,36 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
   }
 
   String _statusText() {
-    if (widget.friend.isOnline) return 'Dang online';
+    if (widget.friend.isOnline)
+      return AppPreferences.tr('Đang trực tuyến', 'Online');
     final lastSeen = widget.friend.lastSeenAt;
-    if (lastSeen == null) return 'Offline';
+    if (lastSeen == null) return AppPreferences.tr('Ngoại tuyến', 'Offline');
 
     final diff = DateTime.now().difference(lastSeen);
-    if (diff.inMinutes < 1) return 'Vua hoat dong';
-    if (diff.inMinutes < 60) return 'Hoat dong ${diff.inMinutes} phut truoc';
-    if (diff.inHours < 24) return 'Hoat dong ${diff.inHours} gio truoc';
-    return 'Hoat dong ${diff.inDays} ngay truoc';
+    if (diff.inMinutes < 1)
+      return AppPreferences.tr('Vừa hoạt động', 'Just active');
+    if (diff.inMinutes < 60) {
+      return AppPreferences.tr(
+        'Hoạt động ${diff.inMinutes} phút trước',
+        'Active ${diff.inMinutes} minutes ago',
+      );
+    }
+    if (diff.inHours < 24) {
+      return AppPreferences.tr(
+        'Hoạt động ${diff.inHours} giờ trước',
+        'Active ${diff.inHours} hours ago',
+      );
+    }
+    return AppPreferences.tr(
+      'Hoạt động ${diff.inDays} ngày trước',
+      'Active ${diff.inDays} days ago',
+    );
   }
 
   String _lastSeenDetail() {
     final lastSeen = widget.friend.lastSeenAt;
-    if (lastSeen == null) return 'Chua co du lieu';
+    if (lastSeen == null)
+      return AppPreferences.tr('Chưa có dữ liệu', 'No data');
 
     final local = lastSeen.toLocal();
     final day = local.day.toString().padLeft(2, '0');
@@ -121,7 +138,9 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
     final statusText = _statusText();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Trang ca nhan')),
+      appBar: AppBar(
+        title: Text(AppPreferences.tr('Trang cá nhân', 'Profile')),
+      ),
       body: RefreshIndicator(
         onRefresh: _loadStats,
         child: ListView(
@@ -170,7 +189,9 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    widget.friend.isOnline ? Icons.circle : Icons.schedule_rounded,
+                    widget.friend.isOnline
+                        ? Icons.circle
+                        : Icons.schedule_rounded,
                     size: 14,
                     color: widget.friend.isOnline
                         ? Colors.green.shade600
@@ -202,17 +223,25 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                   );
                 },
                 icon: const Icon(Icons.chat_bubble_outline_rounded),
-                label: const Text('Nhan tin'),
+                label: Text(AppPreferences.tr('Nhắn tin', 'Message')),
               ),
             ),
             const SizedBox(height: 16),
             _infoCard(
-              icon: widget.friend.isOnline ? Icons.circle : Icons.schedule_rounded,
-              title: 'Trang thai hoat dong',
+              icon: widget.friend.isOnline
+                  ? Icons.circle
+                  : Icons.schedule_rounded,
+              title: AppPreferences.tr(
+                'Trạng thái hoạt động',
+                'Activity status',
+              ),
               value: statusText,
               subtitle: widget.friend.isOnline
-                  ? 'Dang hoat dong ngay luc nay'
-                  : 'Lan cuoi: ${_lastSeenDetail()}',
+                  ? AppPreferences.tr(
+                      'Đang hoạt động ngay lúc này',
+                      'Currently active',
+                    )
+                  : '${AppPreferences.tr('Lần cuối', 'Last seen')}: ${_lastSeenDetail()}',
               valueColor: widget.friend.isOnline
                   ? Colors.green.shade700
                   : Colors.grey.shade700,
@@ -220,33 +249,39 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
             const SizedBox(height: 12),
             _infoCard(
               icon: Icons.mail_outline_rounded,
-              title: 'Lien he',
+              title: AppPreferences.tr('Liên hệ', 'Contact'),
               value: widget.friend.email,
-              subtitle: 'Email da xac minh tu tai khoan',
+              subtitle: AppPreferences.tr(
+                'Email đã xác minh từ tài khoản',
+                'Verified account email',
+              ),
             ),
             const SizedBox(height: 12),
             _infoCard(
               icon: Icons.badge_outlined,
-              title: 'Thong tin tai khoan',
+              title: AppPreferences.tr('Thông tin tài khoản', 'Account info'),
               value: widget.friend.displayName?.trim().isNotEmpty == true
                   ? widget.friend.displayName!.trim()
-                  : 'Chua dat ten hien thi',
+                  : AppPreferences.tr(
+                      'Chưa đặt tên hiển thị',
+                      'No display name',
+                    ),
               subtitle: 'ID: ${widget.friend.id}',
             ),
             if ((widget.friend.bio ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 12),
               _infoCard(
                 icon: Icons.notes_rounded,
-                title: 'Mo ta ban than',
+                title: AppPreferences.tr('Mô tả bản thân', 'Bio'),
                 value: widget.friend.bio!.trim(),
               ),
             ],
             const SizedBox(height: 16),
             Row(
               children: [
-                const Text(
-                  'Thong ke',
-                  style: TextStyle(
+                Text(
+                  AppPreferences.tr('Thống kê', 'Statistics'),
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF1E293B),
@@ -266,11 +301,31 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
               spacing: 12,
               runSpacing: 12,
               children: [
-                _statCard('Bang so huu', _ownedBoards.toString(), Icons.dashboard_customize),
-                _statCard('Bang tham gia', _joinedBoards.toString(), Icons.group_outlined),
-                _statCard('Task duoc giao', _assignedTasks.toString(), Icons.task_alt_outlined),
-                _statCard('Task hoan thanh', _doneTasks.toString(), Icons.check_circle_outline),
-                _statCard('So ban be', _friendCount.toString(), Icons.people_outline_rounded),
+                _statCard(
+                  AppPreferences.tr('Bảng sở hữu', 'Owned boards'),
+                  _ownedBoards.toString(),
+                  Icons.dashboard_customize,
+                ),
+                _statCard(
+                  AppPreferences.tr('Bảng tham gia', 'Joined boards'),
+                  _joinedBoards.toString(),
+                  Icons.group_outlined,
+                ),
+                _statCard(
+                  AppPreferences.tr('Task được giao', 'Assigned tasks'),
+                  _assignedTasks.toString(),
+                  Icons.task_alt_outlined,
+                ),
+                _statCard(
+                  AppPreferences.tr('Task hoàn thành', 'Completed tasks'),
+                  _doneTasks.toString(),
+                  Icons.check_circle_outline,
+                ),
+                _statCard(
+                  AppPreferences.tr('Số bạn bè', 'Friends'),
+                  _friendCount.toString(),
+                  Icons.people_outline_rounded,
+                ),
               ],
             ),
             const SizedBox(height: 14),
@@ -305,14 +360,19 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
             ),
           ),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+          ),
         ],
       ),
     );
   }
 
   Widget _completionChartCard() {
-    final progress = _assignedTasks == 0 ? 0.0 : (_doneTasks / _assignedTasks).clamp(0.0, 1.0);
+    final progress = _assignedTasks == 0
+        ? 0.0
+        : (_doneTasks / _assignedTasks).clamp(0.0, 1.0);
     final percentText = '${(progress * 100).round()}%';
 
     return Container(
@@ -335,7 +395,9 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                   strokeWidth: 10,
                   backgroundColor: const Color(0xFFE2E8F0),
                   strokeCap: StrokeCap.round,
-                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF2563EB),
+                  ),
                 ),
                 Container(
                   width: 94,
@@ -357,9 +419,9 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    const Text(
-                      'Done',
-                      style: TextStyle(
+                    Text(
+                      AppPreferences.tr('Xong', 'Done'),
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: Color(0xFF64748B),
@@ -374,21 +436,25 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
-                  'Ti le hoan thanh task',
-                  style: TextStyle(
+                  AppPreferences.tr(
+                    'Tỉ lệ hoàn thành task',
+                    'Task completion rate',
+                  ),
+                  style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF1E293B),
                   ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                  'Tinh theo task duoc giao va task da xong',
-                  style: TextStyle(
-                    color: Color(0xFF64748B),
+                  AppPreferences.tr(
+                    'Tính theo task được giao và task đã xong',
+                    'Based on assigned and completed tasks',
                   ),
+                  style: const TextStyle(color: Color(0xFF64748B)),
                 ),
               ],
             ),

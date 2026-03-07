@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../app_preferences.dart';
 import '../blocs/auth/auth_bloc.dart';
 import '../blocs/auth/auth_event.dart';
 import '../blocs/auth/auth_state.dart';
@@ -24,15 +25,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (email.isEmpty || password.isEmpty || confirm.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng nhập đầy đủ thông tin')),
+        SnackBar(
+          content: Text(
+            AppPreferences.tr(
+              'Vui lòng nhập đầy đủ thông tin',
+              'Please enter all information',
+            ),
+          ),
+        ),
       );
       return;
     }
 
     if (password != confirm) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Mật khẩu không khớp')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppPreferences.tr('Mật khẩu không khớp', 'Passwords do not match'),
+          ),
+        ),
+      );
       return;
     }
 
@@ -50,7 +62,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           if (state is AuthError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Lỗi: ${state.message}'),
+                content: Text(
+                  '${AppPreferences.tr('Lỗi', 'Error')}: ${state.message}',
+                ),
                 backgroundColor: Colors.red, // Hiện nền đỏ cho nổi bật
                 behavior:
                     SnackBarBehavior.floating, // Hiển thị dạng nổi đẹp hơn
@@ -60,8 +74,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
           // 2. KHI ĐĂNG KÝ THÀNH CÔNG
           else if (state is Authenticated) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('🎉 Đăng ký thành công! Mời bạn đăng nhập.'),
+              SnackBar(
+                content: Text(
+                  AppPreferences.tr(
+                    '🎉 Đăng ký thành công! Mời bạn đăng nhập.',
+                    '🎉 Registration successful! Please login.',
+                  ),
+                ),
                 backgroundColor: Colors.green, // Hiện nền xanh báo tin vui
                 behavior: SnackBarBehavior.floating,
               ),
@@ -92,8 +111,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       color: Colors.blueAccent,
                     ),
                     const SizedBox(height: 24),
-                    const Text(
-                      'Tạo tài khoản',
+                    Text(
+                      AppPreferences.tr('Tạo tài khoản', 'Create account'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 28,
@@ -101,8 +120,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Cùng tham gia quản lý công việc',
+                    Text(
+                      AppPreferences.tr(
+                        'Cùng tham gia quản lý công việc',
+                        'Join us in task management',
+                      ),
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 16, color: Colors.grey),
                     ),
@@ -110,7 +132,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextField(
                       controller: _emailController,
                       decoration: InputDecoration(
-                        labelText: 'Email',
+                        labelText: AppPreferences.tr('Email', 'Email'),
                         prefixIcon: const Icon(Icons.email),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -122,7 +144,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextField(
                       controller: _passwordController,
                       decoration: InputDecoration(
-                        labelText: 'Mật khẩu',
+                        labelText: AppPreferences.tr('Mật khẩu', 'Password'),
                         prefixIcon: const Icon(Icons.lock),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -134,7 +156,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextField(
                       controller: _confirmPasswordController,
                       decoration: InputDecoration(
-                        labelText: 'Xác nhận mật khẩu',
+                        labelText: AppPreferences.tr(
+                          'Xác nhận mật khẩu',
+                          'Confirm password',
+                        ),
                         prefixIcon: const Icon(Icons.lock_outline),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -155,9 +180,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       child: isLoading
                           ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              'Đăng ký',
-                              style: TextStyle(
+                          : Text(
+                              AppPreferences.tr('Đăng ký', 'Register'),
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -173,7 +198,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         );
                       },
-                      child: const Text('Đã có tài khoản? Đăng nhập ngay'),
+                      child: Text(
+                        AppPreferences.tr(
+                          'Đã có tài khoản? Đăng nhập ngay',
+                          'Already have an account? Login now',
+                        ),
+                      ),
                     ),
                   ],
                 ),

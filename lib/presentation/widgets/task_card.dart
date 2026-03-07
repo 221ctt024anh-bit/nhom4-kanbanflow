@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../app_preferences.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mime/mime.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -30,7 +31,8 @@ class TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isOverdue = task.dueAt != null &&
+    final isOverdue =
+        task.dueAt != null &&
         task.status != 'done' &&
         task.dueAt!.isBefore(DateTime.now());
 
@@ -55,7 +57,8 @@ class TaskCard extends StatelessWidget {
             onTap: () {
               showDialog(
                 context: context,
-                builder: (_) => _TaskDetailsDialog(task: task, accentColor: accentColor),
+                builder: (_) =>
+                    _TaskDetailsDialog(task: task, accentColor: accentColor),
               );
             },
             child: Container(
@@ -83,11 +86,17 @@ class TaskCard extends StatelessWidget {
                         ),
                       ),
                       InkWell(
-                        onTap: () => context.read<TaskBloc>().add(DeleteTaskEvent(task.id)),
+                        onTap: () => context.read<TaskBloc>().add(
+                          DeleteTaskEvent(task.id),
+                        ),
                         borderRadius: BorderRadius.circular(8),
                         child: const Padding(
                           padding: EdgeInsets.all(4.0),
-                          child: Icon(Icons.close, color: Colors.black26, size: 18),
+                          child: Icon(
+                            Icons.close,
+                            color: Colors.black26,
+                            size: 18,
+                          ),
                         ),
                       ),
                     ],
@@ -223,7 +232,12 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
         _comments = comments;
       });
     } catch (_) {
-      _showSnack('Không tải được bình luận');
+      _showSnack(
+        AppPreferences.tr(
+          'Không tải được bình luận',
+          'Failed to load comments',
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _loadingComments = false);
@@ -240,7 +254,12 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
         _attachments = attachments;
       });
     } catch (_) {
-      _showSnack('Không tải được tệp đính kèm');
+      _showSnack(
+        AppPreferences.tr(
+          'Không tải được tệp đính kèm',
+          'Failed to load attachments',
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _loadingAttachments = false);
@@ -255,7 +274,10 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
       final stats = await _repo.getRatingStats(_currentTask.id);
       TaskRating? myRating;
       if (userId != null) {
-        myRating = await _repo.getMyRating(taskId: _currentTask.id, userId: userId);
+        myRating = await _repo.getMyRating(
+          taskId: _currentTask.id,
+          userId: userId,
+        );
       }
       if (!mounted) return;
       setState(() {
@@ -264,7 +286,9 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
         _myRating = myRating;
       });
     } catch (_) {
-      _showSnack('Không tải được đánh giá');
+      _showSnack(
+        AppPreferences.tr('Không tải được đánh giá', 'Failed to load ratings'),
+      );
     } finally {
       if (mounted) {
         setState(() => _loadingRating = false);
@@ -277,7 +301,9 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
     if (content.isEmpty) return;
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) {
-      _showSnack('Cần đăng nhập để bình luận');
+      _showSnack(
+        AppPreferences.tr('Cần đăng nhập để bình luận', 'Login to comment'),
+      );
       return;
     }
 
@@ -294,7 +320,7 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
         _commentController.clear();
       });
     } catch (_) {
-      _showSnack('Gửi bình luận thất bại');
+      _showSnack(AppPreferences.tr('Gửi bình luận thất bại', 'Comment failed'));
     } finally {
       if (mounted) {
         setState(() => _sendingComment = false);
@@ -305,7 +331,9 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
   Future<void> _pickAndUploadAttachment() async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) {
-      _showSnack('Cần đăng nhập để tải tệp');
+      _showSnack(
+        AppPreferences.tr('Cần đăng nhập để tải tệp', 'Login to upload'),
+      );
       return;
     }
 
@@ -318,7 +346,9 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
     final picked = file.files.single;
     final bytes = picked.bytes;
     if (bytes == null || bytes.isEmpty) {
-      _showSnack('Không đọc được dữ liệu tệp');
+      _showSnack(
+        AppPreferences.tr('Không đọc được dữ liệu tệp', 'Invalid file data'),
+      );
       return;
     }
 
@@ -336,9 +366,9 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
       setState(() {
         _attachments = [uploaded, ..._attachments];
       });
-      _showSnack('Tải tệp thành công');
+      _showSnack(AppPreferences.tr('Tải tệp thành công', 'File uploaded'));
     } catch (_) {
-      _showSnack('Tải tệp thất bại');
+      _showSnack(AppPreferences.tr('Tải tệp thất bại', 'Upload failed'));
     } finally {
       if (mounted) {
         setState(() => _uploadingAttachment = false);
@@ -349,12 +379,14 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
   Future<void> _openAttachment(TaskAttachment attachment) async {
     final url = Uri.tryParse(attachment.publicUrl);
     if (url == null) {
-      _showSnack('Liên kết tệp không hợp lệ');
+      _showSnack(
+        AppPreferences.tr('Liên kết tệp không hợp lệ', 'Invalid file link'),
+      );
       return;
     }
     final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
     if (!ok) {
-      _showSnack('Không mở được tệp');
+      _showSnack(AppPreferences.tr('Không mở được tệp', 'Cannot open file'));
     }
   }
 
@@ -363,11 +395,13 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
       await _repo.deleteAttachment(attachment);
       if (!mounted) return;
       setState(() {
-        _attachments = _attachments.where((item) => item.id != attachment.id).toList();
+        _attachments = _attachments
+            .where((item) => item.id != attachment.id)
+            .toList();
       });
-      _showSnack('Đã xóa tệp');
+      _showSnack(AppPreferences.tr('Đã xóa tệp', 'File deleted'));
     } catch (_) {
-      _showSnack('Xóa tệp thất bại');
+      _showSnack(AppPreferences.tr('Xóa tệp thất bại', 'Delete failed'));
     }
   }
 
@@ -375,16 +409,24 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
     if (score < 1 || score > 5) return;
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) {
-      _showSnack('Cần đăng nhập để đánh giá');
+      _showSnack(
+        AppPreferences.tr('Cần đăng nhập để đánh giá', 'Login to rate'),
+      );
       return;
     }
     setState(() => _savingRating = true);
     try {
-      await _repo.upsertRating(taskId: _currentTask.id, userId: userId, rating: score);
+      await _repo.upsertRating(
+        taskId: _currentTask.id,
+        userId: userId,
+        rating: score,
+      );
       await _loadRatings();
-      _showSnack('Đã cập nhật đánh giá');
+      _showSnack(AppPreferences.tr('Đã cập nhật đánh giá', 'Rating updated'));
     } catch (_) {
-      _showSnack('Cập nhật đánh giá thất bại');
+      _showSnack(
+        AppPreferences.tr('Cập nhật đánh giá thất bại', 'Rating failed'),
+      );
     } finally {
       if (mounted) {
         setState(() => _savingRating = false);
@@ -394,13 +436,15 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String _statusLabel(String status) {
-    if (status == 'todo') return 'Cần làm';
-    if (status == 'doing') return 'Đang làm';
-    return 'Hoàn thành';
+    if (status == 'todo') return AppPreferences.tr('Cần làm', 'To Do');
+    if (status == 'doing') return AppPreferences.tr('Đang làm', 'Doing');
+    return AppPreferences.tr('Hoàn thành', 'Done');
   }
 
   String _formatDate(String value) {
@@ -446,7 +490,10 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                 runSpacing: 12,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: widget.accentColor.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(20),
@@ -460,7 +507,10 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.grey.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
@@ -478,9 +528,12 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Người thực hiện',
-                    style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF64748B)),
+                  Text(
+                    AppPreferences.tr('Người thực hiện', 'Assignee'),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF64748B),
+                    ),
                   ),
                   TextButton.icon(
                     onPressed: () async {
@@ -501,16 +554,24 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                         status: _currentTask.status,
                         creatorId: _currentTask.creatorId,
                         createdAt: _currentTask.createdAt,
-                        assigneeId: selectedUserId.isEmpty ? null : selectedUserId,
+                        assigneeId: selectedUserId.isEmpty
+                            ? null
+                            : selectedUserId,
                         dueAt: _currentTask.dueAt,
                       );
 
                       setState(() => _currentTask = updatedTask);
                       if (!context.mounted) return;
-                      context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
+                      context.read<TaskBloc>().add(
+                        UpdateTaskEvent(updatedTask),
+                      );
                     },
                     icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-                    label: Text(_currentTask.assigneeId == null ? 'Giao việc' : 'Thay đổi'),
+                    label: Text(
+                      _currentTask.assigneeId == null
+                          ? AppPreferences.tr('Giao việc', 'Assign')
+                          : AppPreferences.tr('Thay đổi', 'Change'),
+                    ),
                   ),
                 ],
               ),
@@ -521,14 +582,26 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                   color: Colors.grey.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: _currentTask.assigneeId != null && _currentTask.assigneeId!.isNotEmpty
-                    ? UserAvatar(userId: _currentTask.assigneeId!, radius: 20, showName: true)
-                    : const Text('Chưa giao cho ai', style: TextStyle(color: Colors.black54)),
+                child:
+                    _currentTask.assigneeId != null &&
+                        _currentTask.assigneeId!.isNotEmpty
+                    ? UserAvatar(
+                        userId: _currentTask.assigneeId!,
+                        radius: 20,
+                        showName: true,
+                      )
+                    : Text(
+                        AppPreferences.tr('Chưa giao cho ai', 'Unassigned'),
+                        style: const TextStyle(color: Colors.black54),
+                      ),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'Mô tả chi tiết',
-                style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF64748B)),
+              Text(
+                AppPreferences.tr('Mô tả chi tiết', 'Description'),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF64748B),
+                ),
               ),
               const SizedBox(height: 8),
               Container(
@@ -539,10 +612,19 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  _currentTask.description.isEmpty ? 'Chưa có mô tả cho task này.' : _currentTask.description,
+                  _currentTask.description.isEmpty
+                      ? AppPreferences.tr(
+                          'Chưa có mô tả cho task này.',
+                          'No description for this task.',
+                        )
+                      : _currentTask.description,
                   style: TextStyle(
-                    color: _currentTask.description.isEmpty ? Colors.black45 : Colors.black87,
-                    fontStyle: _currentTask.description.isEmpty ? FontStyle.italic : FontStyle.normal,
+                    color: _currentTask.description.isEmpty
+                        ? Colors.black45
+                        : Colors.black87,
+                    fontStyle: _currentTask.description.isEmpty
+                        ? FontStyle.italic
+                        : FontStyle.normal,
                     height: 1.4,
                   ),
                 ),
@@ -559,7 +641,7 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                 child: TextButton.icon(
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.check_circle_outline_rounded),
-                  label: const Text('Đóng'),
+                  label: Text(AppPreferences.tr('Đóng', 'Close')),
                 ),
               ),
             ],
@@ -573,9 +655,12 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Bình luận',
-          style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF64748B)),
+        Text(
+          AppPreferences.tr('Bình luận', 'Comments'),
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF64748B),
+          ),
         ),
         const SizedBox(height: 10),
         Container(
@@ -585,9 +670,17 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
             border: Border.all(color: Colors.grey.withOpacity(0.2)),
           ),
           child: _loadingComments
-              ? const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(8),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
               : _comments.isEmpty
-              ? const Text('Chưa có bình luận', style: TextStyle(color: Colors.black54))
+              ? Text(
+                  AppPreferences.tr('Chưa có bình luận', 'No comments yet'),
+                  style: const TextStyle(color: Colors.black54),
+                )
               : ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 220),
                   child: ListView.separated(
@@ -602,7 +695,10 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                           if (item.userId.isNotEmpty)
                             UserAvatar(userId: item.userId, radius: 14)
                           else
-                            const CircleAvatar(radius: 14, child: Icon(Icons.person, size: 16)),
+                            const CircleAvatar(
+                              radius: 14,
+                              child: Icon(Icons.person, size: 16),
+                            ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -610,7 +706,10 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                               children: [
                                 Text(
                                   _formatDate(item.createdAt),
-                                  style: const TextStyle(fontSize: 12, color: Colors.black45),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black45,
+                                  ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(item.content),
@@ -631,9 +730,12 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                 controller: _commentController,
                 minLines: 1,
                 maxLines: 3,
-                decoration: const InputDecoration(
-                  hintText: 'Nhập bình luận...',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: AppPreferences.tr(
+                    'Nhập bình luận...',
+                    'Write a comment...',
+                  ),
+                  border: const OutlineInputBorder(),
                 ),
               ),
             ),
@@ -647,7 +749,7 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.send, size: 16),
-              label: const Text('Gửi'),
+              label: Text(AppPreferences.tr('Gửi', 'Send')),
             ),
           ],
         ),
@@ -660,9 +762,12 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Đánh giá task',
-          style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF64748B)),
+        Text(
+          AppPreferences.tr('Đánh giá task', 'Rate this task'),
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF64748B),
+          ),
         ),
         const SizedBox(height: 10),
         Container(
@@ -684,8 +789,11 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                   children: [
                     Text(
                       _ratingCount == 0
-                          ? 'Chưa có đánh giá'
-                          : 'Trung bình: ${_avgRating.toStringAsFixed(1)}/5 ($_ratingCount đánh giá)',
+                          ? AppPreferences.tr(
+                              'Chưa có đánh giá',
+                              'No ratings yet',
+                            )
+                          : '${AppPreferences.tr('Trung bình', 'Average')}: ${_avgRating.toStringAsFixed(1)}/5 ($_ratingCount ${AppPreferences.tr('đánh giá', 'ratings')})',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 10),
@@ -694,12 +802,14 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                         final star = index + 1;
                         final active = star <= myScore;
                         return IconButton(
-                          onPressed: _savingRating ? null : () => _rateTask(star),
+                          onPressed: _savingRating
+                              ? null
+                              : () => _rateTask(star),
                           icon: Icon(
                             active ? Icons.star : Icons.star_border,
                             color: active ? Colors.amber[700] : Colors.grey,
                           ),
-                          tooltip: '$star sao',
+                          tooltip: '$star ${AppPreferences.tr('sao', 'stars')}',
                         );
                       }),
                     ),
@@ -716,10 +826,13 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
       children: [
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
-                'Tệp đính kèm',
-                style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF64748B)),
+                AppPreferences.tr('Tệp đính kèm', 'Attachments'),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF64748B),
+                ),
               ),
             ),
             OutlinedButton.icon(
@@ -731,7 +844,7 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.upload_file),
-              label: const Text('Tải lên'),
+              label: Text(AppPreferences.tr('Tải lên', 'Upload')),
             ),
           ],
         ),
@@ -743,9 +856,20 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
             border: Border.all(color: Colors.grey.withOpacity(0.2)),
           ),
           child: _loadingAttachments
-              ? const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(8),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
               : _attachments.isEmpty
-              ? const Text('Chưa có tệp đính kèm', style: TextStyle(color: Colors.black54))
+              ? Text(
+                  AppPreferences.tr(
+                    'Chưa có tệp đính kèm',
+                    'No attachments yet',
+                  ),
+                  style: const TextStyle(color: Colors.black54),
+                )
               : Column(
                   children: _attachments.map((item) {
                     return ListTile(
@@ -762,12 +886,12 @@ class _TaskDetailsDialogState extends State<_TaskDetailsDialog> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            tooltip: 'Mở',
+                            tooltip: AppPreferences.tr('Mở', 'Open'),
                             onPressed: () => _openAttachment(item),
                             icon: const Icon(Icons.open_in_new, size: 18),
                           ),
                           IconButton(
-                            tooltip: 'Xóa',
+                            tooltip: AppPreferences.tr('Xóa', 'Delete'),
                             onPressed: () => _deleteAttachment(item),
                             icon: const Icon(Icons.delete_outline, size: 18),
                           ),

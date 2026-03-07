@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app_preferences.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/board_repository.dart';
 import '../../injection_container.dart' as di;
@@ -50,8 +51,8 @@ class _BoardMemberSelectDialogState extends State<BoardMemberSelectDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text(
-        'Giao cho thành viên',
+      title: Text(
+        AppPreferences.tr('Giao việc cho thành viên', 'Assign to Member'),
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
       content: SizedBox(
@@ -62,12 +63,19 @@ class _BoardMemberSelectDialogState extends State<BoardMemberSelectDialog> {
             : _error != null
             ? Center(
                 child: Text(
-                  'Lỗi: $_error',
+                  '${AppPreferences.tr('Lỗi', 'Error')}: $_error',
                   style: const TextStyle(color: Colors.red),
                 ),
               )
             : _members.isEmpty
-            ? const Center(child: Text('Bảng chưa có thành viên nào.'))
+            ? Center(
+                child: Text(
+                  AppPreferences.tr(
+                    'Bảng này chưa có thành viên nào.',
+                    'No members in this board yet.',
+                  ),
+                ),
+              )
             : ListView.builder(
                 itemCount: _members.length + 1, // +1 for "Bỏ giao việc"
                 itemBuilder: (context, index) {
@@ -80,9 +88,9 @@ class _BoardMemberSelectDialogState extends State<BoardMemberSelectDialog> {
                           color: Colors.black54,
                         ),
                       ),
-                      title: const Text(
-                        'Bỏ giao việc',
-                        style: TextStyle(fontStyle: FontStyle.italic),
+                      title: Text(
+                        AppPreferences.tr('Bỏ giao việc', 'Unassign'),
+                        style: const TextStyle(fontStyle: FontStyle.italic),
                       ),
                       onTap: () {
                         Navigator.pop(

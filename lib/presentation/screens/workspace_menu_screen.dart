@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
+import '../../app_preferences.dart';
 
 import '../../domain/entities/board.dart';
 import '../blocs/auth/auth_bloc.dart';
@@ -19,9 +20,9 @@ class WorkspaceMenuScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Workspace',
-          style: TextStyle(fontWeight: FontWeight.w700),
+        title: Text(
+          AppPreferences.tr('Không gian làm việc', 'Workspace'),
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
       body: SafeArea(
@@ -35,7 +36,9 @@ class WorkspaceMenuScreen extends StatelessWidget {
                     child: ElevatedButton.icon(
                       onPressed: () => _showAddBoardDialog(context),
                       icon: const Icon(Icons.add_rounded),
-                      label: const Text('Tao bang moi'),
+                      label: Text(
+                        AppPreferences.tr('Tạo bảng mới', 'Create new board'),
+                      ),
                     ),
                   ),
                 ],
@@ -48,7 +51,11 @@ class WorkspaceMenuScreen extends StatelessWidget {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (state is BoardError) {
-                    return Center(child: Text('Loi: ${state.message}'));
+                    return Center(
+                      child: Text(
+                        '${AppPreferences.tr('Lỗi', 'Error')}: ${state.message}',
+                      ),
+                    );
                   }
                   if (state is! BoardLoaded) {
                     return const SizedBox.shrink();
@@ -56,10 +63,13 @@ class WorkspaceMenuScreen extends StatelessWidget {
 
                   final boards = state.boards;
                   if (boards.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Text(
-                        'Chua co bang nao. Tao bang moi de bat dau.',
-                        style: TextStyle(color: Color(0xFF64748B)),
+                        AppPreferences.tr(
+                          'Chưa có bảng nào. Tạo bảng mới để bắt đầu.',
+                          'No boards yet. Create a new one to start.',
+                        ),
+                        style: const TextStyle(color: Color(0xFF64748B)),
                       ),
                     );
                   }
@@ -122,7 +132,7 @@ class WorkspaceMenuScreen extends StatelessWidget {
                                 ),
                               ),
                               IconButton(
-                                tooltip: 'Xoa',
+                                tooltip: AppPreferences.tr('Xóa', 'Delete'),
                                 onPressed: () =>
                                     _showDeleteBoardDialog(context, board),
                                 icon: const Icon(
@@ -147,9 +157,9 @@ class WorkspaceMenuScreen extends StatelessWidget {
                   Navigator.pop(context);
                 },
                 icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-                label: const Text(
-                  'Dang xuat',
-                  style: TextStyle(color: Colors.redAccent),
+                label: Text(
+                  AppPreferences.tr('Đăng xuất', 'Logout'),
+                  style: const TextStyle(color: Colors.redAccent),
                 ),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(46),
@@ -168,39 +178,41 @@ class WorkspaceMenuScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Tao bang moi'),
+        title: Text(AppPreferences.tr('Tạo bảng mới', 'Create new board')),
         content: TextField(
           controller: titleController,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Ten bang',
+          decoration: InputDecoration(
+            hintText: AppPreferences.tr('Tên bảng', 'Board title'),
             border: OutlineInputBorder(),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Huy'),
+            child: Text(AppPreferences.tr('Hủy', 'Cancel')),
           ),
           ElevatedButton(
             onPressed: () {
               final title = titleController.text.trim();
               if (title.isEmpty) return;
               final authState = context.read<AuthBloc>().state;
-              final userId = authState is Authenticated ? authState.user.id : '';
+              final userId = authState is Authenticated
+                  ? authState.user.id
+                  : '';
               context.read<BoardBloc>().add(
-                    AddBoardEvent(
-                      Board(
-                        id: const Uuid().v4(),
-                        title: title,
-                        ownerId: userId,
-                        createdAt: DateTime.now().toIso8601String(),
-                      ),
-                    ),
-                  );
+                AddBoardEvent(
+                  Board(
+                    id: const Uuid().v4(),
+                    title: title,
+                    ownerId: userId,
+                    createdAt: DateTime.now().toIso8601String(),
+                  ),
+                ),
+              );
               Navigator.pop(context);
             },
-            child: const Text('Tao'),
+            child: Text(AppPreferences.tr('Tạo', 'Create')),
           ),
         ],
       ),
@@ -211,12 +223,17 @@ class WorkspaceMenuScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Xac nhan xoa'),
-        content: Text('Ban co chac muon xoa bang "${board.title}"?'),
+        title: Text(AppPreferences.tr('Xác nhận xóa', 'Confirm delete')),
+        content: Text(
+          AppPreferences.tr(
+            'Bạn có chắc muốn xóa bảng "${board.title}"?',
+            'Are you sure you want to delete board "${board.title}"?',
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Huy'),
+            child: Text(AppPreferences.tr('Hủy', 'Cancel')),
           ),
           ElevatedButton(
             onPressed: () {
@@ -224,7 +241,7 @@ class WorkspaceMenuScreen extends StatelessWidget {
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: const Text('Xoa'),
+            child: Text(AppPreferences.tr('Xóa', 'Delete')),
           ),
         ],
       ),

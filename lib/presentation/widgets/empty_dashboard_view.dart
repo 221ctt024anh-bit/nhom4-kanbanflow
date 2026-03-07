@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../blocs/auth/auth_bloc.dart';
 import '../blocs/auth/auth_event.dart';
 import '../blocs/auth/auth_state.dart';
+import '../../app_preferences.dart';
 
 class EmptyDashboardView extends StatefulWidget {
   final VoidCallback onAddBoard;
@@ -24,7 +25,7 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
   final SupabaseClient _client = Supabase.instance.client;
   bool _loading = true;
 
-  String _displayName = 'Nguoi dung';
+  String _displayName = AppPreferences.tr('Người dùng', 'User');
   String _email = '';
   String _bio = '';
   String? _avatarUrl;
@@ -49,9 +50,12 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
   Future<void> _loadProfileData() async {
     final currentUser = _client.auth.currentUser;
     final authState = context.read<AuthBloc>().state;
-    final userId = currentUser?.id ?? (authState is Authenticated ? authState.user.id : null);
+    final userId =
+        currentUser?.id ??
+        (authState is Authenticated ? authState.user.id : null);
     final authEmail =
-        currentUser?.email ?? (authState is Authenticated ? authState.user.email : null);
+        currentUser?.email ??
+        (authState is Authenticated ? authState.user.email : null);
 
     if (userId == null) {
       if (!mounted) return;
@@ -61,7 +65,9 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
 
     if (mounted) {
       setState(() {
-        _displayName = (authEmail ?? 'Nguoi dung').split('@').first;
+        _displayName = (authEmail ?? AppPreferences.tr('Người dùng', 'User'))
+            .split('@')
+            .first;
         _email = authEmail ?? '';
       });
     }
@@ -203,10 +209,12 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
           CircleAvatar(
             radius: 32,
             backgroundColor: Colors.blueAccent.withOpacity(0.15),
-            backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+            backgroundImage: _avatarUrl != null
+                ? NetworkImage(_avatarUrl!)
+                : null,
             child: _avatarUrl == null
                 ? Text(
-                    _displayName.isEmpty ? 'N' : _displayName[0].toUpperCase(),
+                    _displayName.isEmpty ? 'U' : _displayName[0].toUpperCase(),
                     style: const TextStyle(
                       color: Colors.blueAccent,
                       fontSize: 22,
@@ -232,7 +240,9 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _email.isEmpty ? 'Chua co email' : _email,
+                  _email.isEmpty
+                      ? AppPreferences.tr('Chưa có email', 'No email')
+                      : _email,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Color(0xFF64748B)),
@@ -268,12 +278,36 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
       spacing: 12,
       runSpacing: 12,
       children: [
-        _statCard('Bang so huu', _ownedBoards.toString(), Icons.dashboard_customize),
-        _statCard('Bang tham gia', _joinedBoards.toString(), Icons.group_outlined),
-        _statCard('Task duoc giao', _assignedTasks.toString(), Icons.task_alt_outlined),
-        _statCard('Task hoan thanh', _doneTasks.toString(), Icons.check_circle_outline),
-        _statCard('So ban be', _friendCount.toString(), Icons.people_outline_rounded),
-        _statCard('Thong bao moi', _unreadNotifications.toString(), Icons.notifications_none),
+        _statCard(
+          AppPreferences.tr('Bảng sở hữu', 'Owned Boards'),
+          _ownedBoards.toString(),
+          Icons.dashboard_customize,
+        ),
+        _statCard(
+          AppPreferences.tr('Bảng tham gia', 'Joined Boards'),
+          _joinedBoards.toString(),
+          Icons.group_outlined,
+        ),
+        _statCard(
+          AppPreferences.tr('Thẻ được giao', 'Assigned Tasks'),
+          _assignedTasks.toString(),
+          Icons.task_alt_outlined,
+        ),
+        _statCard(
+          AppPreferences.tr('Thẻ hoàn thành', 'Completed Tasks'),
+          _doneTasks.toString(),
+          Icons.check_circle_outline,
+        ),
+        _statCard(
+          AppPreferences.tr('Số bạn bè', 'Total Friends'),
+          _friendCount.toString(),
+          Icons.people_outline_rounded,
+        ),
+        _statCard(
+          AppPreferences.tr('Thông báo mới', 'New Notifications'),
+          _unreadNotifications.toString(),
+          Icons.notifications_none,
+        ),
       ],
     );
   }
@@ -301,14 +335,19 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
             ),
           ),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildCompletionChartCard() {
-    final progress = _assignedTasks == 0 ? 0.0 : (_doneTasks / _assignedTasks).clamp(0.0, 1.0);
+    final progress = _assignedTasks == 0
+        ? 0.0
+        : (_doneTasks / _assignedTasks).clamp(0.0, 1.0);
     final percentText = '${(progress * 100).round()}%';
 
     return Container(
@@ -331,7 +370,9 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
                   strokeWidth: 10,
                   backgroundColor: const Color(0xFFE2E8F0),
                   strokeCap: StrokeCap.round,
-                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF2563EB),
+                  ),
                 ),
                 Container(
                   width: 94,
@@ -354,7 +395,7 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
                     ),
                     const SizedBox(height: 2),
                     const Text(
-                      'Done',
+                      'Xong',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -370,9 +411,12 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
-                  'Ti le hoan thanh task',
+                  AppPreferences.tr(
+                    'Tỉ lệ hoàn thành công việc',
+                    'Task Completion Rate',
+                  ),
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -381,8 +425,11 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Tinh theo task duoc giao va task da xong',
-                  style: TextStyle(color: Color(0xFF64748B)),
+                  AppPreferences.tr(
+                    'Tính theo thẻ được giao và đã xong',
+                    'Based on assigned and finished tasks',
+                  ),
+                  style: const TextStyle(color: Color(0xFF64748B)),
                 ),
               ],
             ),
@@ -402,9 +449,13 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Hanh dong nhanh',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
+          Text(
+            AppPreferences.tr('Hành động nhanh', 'Quick Actions'),
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1E293B),
+            ),
           ),
           const SizedBox(height: 12),
           Row(
@@ -413,7 +464,7 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
                 child: ElevatedButton.icon(
                   onPressed: widget.onAddBoard,
                   icon: const Icon(Icons.add),
-                  label: const Text('Tao bang'),
+                  label: Text(AppPreferences.tr('Tạo bảng', 'Create Board')),
                 ),
               ),
               const SizedBox(width: 10),
@@ -421,7 +472,7 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
                 child: OutlinedButton.icon(
                   onPressed: widget.onOpenMenu,
                   icon: const Icon(Icons.menu_open),
-                  label: const Text('Mo menu'),
+                  label: Text(AppPreferences.tr('Mở menu', 'Open Menu')),
                 ),
               ),
             ],
@@ -441,21 +492,25 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Tai khoan',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
+          Text(
+            AppPreferences.tr('Tài khoản', 'Account'),
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1E293B),
+            ),
           ),
           const SizedBox(height: 10),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.refresh),
-            title: const Text('Lam moi du lieu'),
+            title: Text(AppPreferences.tr('Làm mới dữ liệu', 'Refresh data')),
             onTap: _loadProfileData,
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.settings_outlined),
-            title: const Text('Cai dat'),
+            title: Text(AppPreferences.tr('Cài đặt', 'Settings')),
             onTap: () async {
               await Navigator.pushNamed(context, '/settings');
               await _loadProfileData();
@@ -464,7 +519,7 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.group_outlined),
-            title: const Text('Ban be'),
+            title: Text(AppPreferences.tr('Bạn bè', 'Friends')),
             onTap: () async {
               await Navigator.pushNamed(context, '/friends');
               await _loadProfileData();
@@ -473,7 +528,10 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-            title: const Text('Dang xuat', style: TextStyle(color: Colors.redAccent)),
+            title: Text(
+              AppPreferences.tr('Đăng xuất', 'Logout'),
+              style: const TextStyle(color: Colors.redAccent),
+            ),
             onTap: () => context.read<AuthBloc>().add(SignOutRequested()),
           ),
         ],

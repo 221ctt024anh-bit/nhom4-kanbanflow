@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../app_preferences.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/board_repository.dart';
 import '../../injection_container.dart' as di;
@@ -75,7 +76,14 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
       await _loadMembers(); // Reload list
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã mời thành viên thành công!')),
+          SnackBar(
+            content: Text(
+              AppPreferences.tr(
+                'Đã mời thành viên thành công!',
+                'Member invited successfully!',
+              ),
+            ),
+          ),
         );
       }
     } catch (e) {
@@ -111,8 +119,8 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text(
-        'Thành viên phân quyền',
+      title: Text(
+        AppPreferences.tr('Thành viên & Phân quyền', 'Board Members'),
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
       content: SizedBox(
@@ -127,7 +135,10 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
                     child: TextField(
                       controller: _emailController,
                       decoration: InputDecoration(
-                        hintText: 'Nhập email người dùng...',
+                        hintText: AppPreferences.tr(
+                          'Nhập email người dùng...',
+                          'Enter user email...',
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -160,9 +171,9 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
                               color: Colors.white,
                             ),
                           )
-                        : const Text(
-                            'Mời',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                        : Text(
+                            AppPreferences.tr('Mời', 'Invite'),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                   ),
                 ],
@@ -178,7 +189,7 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'Lỗi: $_error',
+                  '${AppPreferences.tr('Lỗi', 'Error')}: $_error',
                   style: const TextStyle(color: Colors.redAccent, fontSize: 13),
                 ),
               ),
@@ -186,7 +197,14 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _members.isEmpty
-                  ? const Center(child: Text('Chưa có thành viên nào.'))
+                  ? Center(
+                      child: Text(
+                        AppPreferences.tr(
+                          'Chưa có thành viên nào.',
+                          'No members yet.',
+                        ),
+                      ),
+                    )
                   : ListView.builder(
                       itemCount: _members.length,
                       itemBuilder: (context, index) {
@@ -220,9 +238,12 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
                                   onPressed: () => _removeMember(member.id),
                                 )
                               : (member.id == widget.ownerId
-                                    ? const Chip(
+                                    ? Chip(
                                         label: Text(
-                                          'Owner',
+                                          AppPreferences.tr(
+                                            'Chủ sở hữu',
+                                            'Owner',
+                                          ),
                                           style: TextStyle(fontSize: 10),
                                         ),
                                         padding: EdgeInsets.zero,
@@ -238,7 +259,7 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Đóng'),
+          child: Text(AppPreferences.tr('Đóng', 'Close')),
         ),
       ],
     );

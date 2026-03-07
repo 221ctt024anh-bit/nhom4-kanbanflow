@@ -27,7 +27,7 @@ class LocalDatabase {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('kanbanflow.db');
+    _database = await _initDB('taskmate.db');
     return _database!;
   }
 
@@ -191,7 +191,10 @@ class LocalDatabase {
         .toList();
   }
 
-  Future<void> replaceTasksForBoard(String boardId, List<TaskModel> tasks) async {
+  Future<void> replaceTasksForBoard(
+    String boardId,
+    List<TaskModel> tasks,
+  ) async {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('tasks', where: 'board_id = ?', whereArgs: [boardId]);

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../app_preferences.dart';
 
 import '../../data/repositories/chat_repository.dart';
 import '../../domain/entities/direct_message.dart';
@@ -52,14 +53,21 @@ class _ChatScreenState extends State<ChatScreen> {
     if (text.isEmpty || _sending) return;
     setState(() => _sending = true);
     try {
-      await _chatRepository.sendMessage(friendId: widget.friend.id, content: text);
+      await _chatRepository.sendMessage(
+        friendId: widget.friend.id,
+        content: text,
+      );
       _messageController.clear();
       _scrollToBottom();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gửi tin nhắn thất bại: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${AppPreferences.tr('Gửi tin nhắn thất bại', 'Failed to send message')}: $e',
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -96,8 +104,9 @@ class _ChatScreenState extends State<ChatScreen> {
             CircleAvatar(
               radius: 18,
               backgroundColor: Colors.blueAccent.withOpacity(0.2),
-              backgroundImage:
-                  widget.friend.avatarUrl != null ? NetworkImage(widget.friend.avatarUrl!) : null,
+              backgroundImage: widget.friend.avatarUrl != null
+                  ? NetworkImage(widget.friend.avatarUrl!)
+                  : null,
               child: widget.friend.avatarUrl == null
                   ? Text(
                       title.substring(0, 1).toUpperCase(),
@@ -115,10 +124,14 @@ class _ChatScreenState extends State<ChatScreen> {
                 children: [
                   Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
                   Text(
-                    widget.friend.isOnline ? 'Đang online' : 'Offline',
+                    widget.friend.isOnline
+                        ? AppPreferences.tr('Đang hoạt động', 'Active')
+                        : AppPreferences.tr('Ngoại tuyến', 'Offline'),
                     style: TextStyle(
                       fontSize: 12,
-                      color: widget.friend.isOnline ? Colors.green : Colors.grey.shade600,
+                      color: widget.friend.isOnline
+                          ? Colors.green
+                          : Colors.grey.shade600,
                     ),
                   ),
                 ],
@@ -141,9 +154,12 @@ class _ChatScreenState extends State<ChatScreen> {
                 }
 
                 if (messages.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Text(
-                      'Chưa có tin nhắn nào.\nHãy bắt đầu cuộc trò chuyện.',
+                      AppPreferences.tr(
+                        'Chưa có tin nhắn nào.\nHãy bắt đầu cuộc trò chuyện.',
+                        'No messages yet.\nStart a conversation.',
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   );
@@ -157,10 +173,15 @@ class _ChatScreenState extends State<ChatScreen> {
                     final message = messages[index];
                     final isMine = message.senderId == _currentUserId;
                     return Align(
-                      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+                      alignment: isMine
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
                       child: Container(
                         margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         constraints: const BoxConstraints(maxWidth: 280),
                         decoration: BoxDecoration(
                           color: isMine ? Colors.blueAccent : Colors.white,
@@ -174,13 +195,16 @@ class _ChatScreenState extends State<ChatScreen> {
                           ],
                         ),
                         child: Column(
-                          crossAxisAlignment:
-                              isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                          crossAxisAlignment: isMine
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
                           children: [
                             Text(
                               message.content,
                               style: TextStyle(
-                                color: isMine ? Colors.white : const Color(0xFF1E293B),
+                                color: isMine
+                                    ? Colors.white
+                                    : const Color(0xFF1E293B),
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -188,7 +212,9 @@ class _ChatScreenState extends State<ChatScreen> {
                               _formatTime(message.createdAt),
                               style: TextStyle(
                                 fontSize: 11,
-                                color: isMine ? Colors.white70 : Colors.grey.shade500,
+                                color: isMine
+                                    ? Colors.white70
+                                    : Colors.grey.shade500,
                               ),
                             ),
                           ],
@@ -214,7 +240,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       minLines: 1,
                       maxLines: 4,
                       decoration: InputDecoration(
-                        hintText: 'Nhập tin nhắn...',
+                        hintText: AppPreferences.tr(
+                          'Nhập tin nhắn...',
+                          'Type a message...',
+                        ),
                         filled: true,
                         fillColor: Colors.white,
                         contentPadding: const EdgeInsets.symmetric(
@@ -235,7 +264,10 @@ class _ChatScreenState extends State<ChatScreen> {
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Icon(Icons.send_rounded),
                   ),

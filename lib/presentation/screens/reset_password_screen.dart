@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../app_preferences.dart';
 
 import '../blocs/auth/auth_bloc.dart';
 import '../blocs/auth/auth_event.dart';
@@ -22,14 +23,28 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
     if (newPassword.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mat khau toi thieu 6 ky tu')),
+        SnackBar(
+          content: Text(
+            AppPreferences.tr(
+              'Mật khẩu tối thiểu 6 ký tự',
+              'Password must be at least 6 characters',
+            ),
+          ),
+        ),
       );
       return;
     }
 
     if (newPassword != confirmPassword) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Xac nhan mat khau khong khop')),
+        SnackBar(
+          content: Text(
+            AppPreferences.tr(
+              'Xác nhận mật khẩu không khớp',
+              'Confirmation password does not match',
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -42,18 +57,20 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Dat lai mat khau')),
+      appBar: AppBar(
+        title: Text(AppPreferences.tr('Đặt lại mật khẩu', 'Reset password')),
+      ),
       body: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(state.message)));
           }
           if (state is AuthActionSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(state.message)));
             Navigator.pop(context);
           }
         },
@@ -67,27 +84,39 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      'Nhap mat khau moi',
+                    Text(
+                      AppPreferences.tr(
+                        'Nhập mật khẩu mới',
+                        'Enter new password',
+                      ),
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     TextField(
                       controller: _newPasswordController,
                       obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Mat khau moi',
-                        prefixIcon: Icon(Icons.lock_outline),
+                      decoration: InputDecoration(
+                        labelText: AppPreferences.tr(
+                          'Mật khẩu mới',
+                          'New password',
+                        ),
+                        prefixIcon: const Icon(Icons.lock_outline),
                       ),
                     ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: _confirmPasswordController,
                       obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Xac nhan mat khau',
-                        prefixIcon: Icon(Icons.lock),
+                      decoration: InputDecoration(
+                        labelText: AppPreferences.tr(
+                          'Xác nhận mật khẩu',
+                          'Confirm password',
+                        ),
+                        prefixIcon: const Icon(Icons.lock),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -99,7 +128,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                               width: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Cập nhật mật khẩu'),
+                          : Text(
+                              AppPreferences.tr(
+                                'Cập nhật mật khẩu',
+                                'Update password',
+                              ),
+                            ),
                     ),
                   ],
                 ),

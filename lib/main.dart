@@ -140,6 +140,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  static final _lightTheme = ThemeData(
+    primarySwatch: Colors.blue,
+    useMaterial3: true,
+    textTheme: GoogleFonts.interTextTheme(),
+    scaffoldBackgroundColor: const Color(0xFFF4F7FC),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.white,
+      foregroundColor: Colors.black87,
+      elevation: 0,
+      iconTheme: IconThemeData(color: Colors.black87),
+    ),
+  );
+
+  static final _darkTheme = ThemeData(
+    brightness: Brightness.dark,
+    useMaterial3: true,
+    textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+  );
+
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
@@ -158,7 +177,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         valueListenable: AppPreferences.notifier,
         builder: (context, prefs, _) => MaterialApp(
           navigatorKey: _navigatorKey,
-          title: 'KanbanFlow Nhom 4',
+          title: 'TaskMate',
           debugShowCheckedModeBanner: false,
           routes: {
             '/reset-password': (_) => const ResetPasswordScreen(),
@@ -167,35 +186,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             '/friends': (_) => const FriendsScreen(),
           },
           locale: prefs.locale,
-          supportedLocales: const [
-            Locale('vi'),
-            Locale('en'),
-          ],
+          supportedLocales: const [Locale('vi'), Locale('en')],
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
           themeMode: prefs.themeMode,
-          theme: ThemeData(
-            primarySwatch: Colors.blue,
-            useMaterial3: true,
-            textTheme: GoogleFonts.interTextTheme(Theme.of(context).textTheme),
-            scaffoldBackgroundColor: const Color(0xFFF4F7FC),
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black87,
-              elevation: 0,
-              iconTheme: IconThemeData(color: Colors.black87),
-            ),
-          ),
-          darkTheme: ThemeData(
-            brightness: Brightness.dark,
-            useMaterial3: true,
-            textTheme: GoogleFonts.interTextTheme(
-              ThemeData.dark().textTheme,
-            ),
-          ),
+          theme: _lightTheme,
+          darkTheme: _darkTheme,
           home: BlocBuilder<AuthBloc, AuthState>(
             builder: (context, state) {
               if (state is AuthLoading) {

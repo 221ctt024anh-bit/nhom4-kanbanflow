@@ -1,4 +1,5 @@
-﻿import 'dart:typed_data';
+﻿import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -111,7 +112,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       final file = result.files.first;
       if (file.bytes == null) {
-        _showSnack('Không đọc được dữ liệu ảnh');
+        _showSnack(
+          _t('Không đọc được dữ liệu ảnh', 'Could not read image data'),
+        );
         return;
       }
 
@@ -132,7 +135,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _pendingAvatarExtension = extension;
       });
     } catch (e) {
-      _showSnack('Chọn ảnh thất bại: $e');
+      _showSnack('${_t('Chọn ảnh thất bại', 'Image selection failed')}: $e');
     }
   }
 
@@ -142,7 +145,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final displayName = _displayNameController.text.trim();
     final bio = _bioController.text.trim();
     if (displayName.isEmpty) {
-      _showSnack('Tên hiển thị không được để trống');
+      _showSnack(
+        _t('Tên hiển thị không được để trống', 'Display name cannot be empty'),
+      );
       return;
     }
 
@@ -154,10 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           userId: _userId!,
           displayName: displayName,
         );
-        await _repo.updateBio(
-          userId: _userId!,
-          bio: bio,
-        );
+        await _repo.updateBio(userId: _userId!, bio: bio);
       } catch (e) {
         displayNameError = e.toString();
       }
@@ -181,21 +183,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
         themeMode: _themeMode,
         languageCode: _languageCode,
       );
-      AppPreferences.apply(
-        themeMode: _themeMode,
-        languageCode: _languageCode,
-      );
+      AppPreferences.apply(themeMode: _themeMode, languageCode: _languageCode);
 
       if (displayNameError == null) {
-        _showSnack('Đã lưu cài đặt');
+        _showSnack(_t('Đã lưu cài đặt', 'Settings saved'));
       } else {
-        _showSnack('Đã lưu cài đặt, nhưng chưa cập nhật được tên hiển thị');
+        _showSnack(
+          _t(
+            'Đã lưu cài đặt, nhưng chưa cập nhật được tên hiển thị',
+            'Settings saved, but could not update display name',
+          ),
+        );
       }
     } catch (e) {
       final message = e is PostgrestException
           ? (e.message.isNotEmpty ? e.message : e.toString())
           : e.toString();
-      _showSnack('Lưu cài đặt thất bại: $message');
+      _showSnack(
+        '${_t('Lưu cài đặt thất bại', 'Failed to save settings')}: $message',
+      );
     } finally {
       if (mounted) {
         setState(() => _saving = false);
@@ -236,10 +242,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               onTap: () => Navigator.pop(context),
                             ),
                             const SizedBox(width: 12),
-                            const Expanded(
+                            Expanded(
                               child: Text(
-                                'Cài đặt',
-                                style: TextStyle(
+                                _t('Cài đặt', 'Settings'),
+                                style: const TextStyle(
                                   fontSize: 32,
                                   fontWeight: FontWeight.w800,
                                   color: Color(0xFF12263F),
@@ -257,7 +263,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       sliver: SliverList(
                         delegate: SliverChildListDelegate([
                           _sectionCard(
-                            title: 'Tài khoản',
+                            title: _t('Tài khoản', 'Account'),
                             icon: Icons.person_outline_rounded,
                             child: Column(
                               children: [
@@ -266,12 +272,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     CircleAvatar(
                                       radius: 32,
                                       backgroundColor: const Color(0xFFDFE9FF),
-                                      backgroundImage: _pendingAvatarBytes != null
+                                      backgroundImage:
+                                          _pendingAvatarBytes != null
                                           ? MemoryImage(_pendingAvatarBytes!)
                                           : (_avatarUrl != null
-                                                    ? NetworkImage(_avatarUrl!)
-                                                    : null),
-                                      child: (_pendingAvatarBytes == null &&
+                                                ? NetworkImage(_avatarUrl!)
+                                                : null),
+                                      child:
+                                          (_pendingAvatarBytes == null &&
                                               _avatarUrl == null)
                                           ? const Icon(
                                               Icons.person_outline_rounded,
@@ -284,8 +292,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     Expanded(
                                       child: OutlinedButton.icon(
                                         onPressed: _saving ? null : _pickAvatar,
-                                        icon: const Icon(Icons.photo_camera_outlined),
-                                        label: const Text('Đổi ảnh đại diện'),
+                                        icon: const Icon(
+                                          Icons.photo_camera_outlined,
+                                        ),
+                                        label: Text(
+                                          _t(
+                                            'Đổi ảnh đại diện',
+                                            'Change avatar',
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -294,9 +309,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 TextField(
                                   controller: _displayNameController,
                                   decoration: InputDecoration(
-                                    labelText: 'Tên hiển thị',
-                                    hintText: 'Nhập tên của bạn',
-                                    prefixIcon: const Icon(Icons.badge_outlined),
+                                    labelText: _t(
+                                      'Tên hiển thị',
+                                      'Display name',
+                                    ),
+                                    hintText: _t(
+                                      'Nhập tên của bạn',
+                                      'Enter your name',
+                                    ),
+                                    prefixIcon: const Icon(
+                                      Icons.badge_outlined,
+                                    ),
                                     filled: true,
                                     fillColor: Colors.white,
                                     border: OutlineInputBorder(
@@ -319,9 +342,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   minLines: 2,
                                   maxLines: 4,
                                   decoration: InputDecoration(
-                                    labelText: 'Mô tả bản thân',
-                                    hintText: 'Viết vài dòng giới thiệu về bạn',
-                                    prefixIcon: const Icon(Icons.edit_note_rounded),
+                                    labelText: _t('Mô tả bản thân', 'Bio'),
+                                    hintText: _t(
+                                      'Viết vài dòng giới thiệu về bạn',
+                                      'Write a few lines about yourself',
+                                    ),
+                                    prefixIcon: const Icon(
+                                      Icons.edit_note_rounded,
+                                    ),
                                     filled: true,
                                     fillColor: Colors.white,
                                     border: OutlineInputBorder(
@@ -343,24 +371,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           const SizedBox(height: 14),
                           _sectionCard(
-                            title: 'Thông báo',
+                            title: _t('Thông báo', 'Notifications'),
                             icon: Icons.notifications_active_outlined,
                             child: Column(
                               children: [
                                 _switchTile(
-                                  title: 'Thông báo trong app',
-                                  subtitle: 'Hiển thị chuông, badge và thông báo nội bộ',
+                                  title: _t(
+                                    'Thông báo trong app',
+                                    'In-app notifications',
+                                  ),
+                                  subtitle: _t(
+                                    'Hiển thị chuông, badge và thông báo nội bộ',
+                                    'Show bell, badge and internal notifications',
+                                  ),
                                   value: _inAppNotifications,
-                                  onChanged: (value) =>
-                                      setState(() => _inAppNotifications = value),
+                                  onChanged: (value) => setState(
+                                    () => _inAppNotifications = value,
+                                  ),
                                 ),
                                 const SizedBox(height: 10),
                                 _switchTile(
-                                  title: 'Thông báo qua email',
-                                  subtitle: 'Nhận email khi có bình luận mới',
+                                  title: _t(
+                                    'Thông báo qua email',
+                                    'Email notifications',
+                                  ),
+                                  subtitle: _t(
+                                    'Nhận email khi có bình luận mới',
+                                    'Receive email when there are new comments',
+                                  ),
                                   value: _emailNotifications,
-                                  onChanged: (value) =>
-                                      setState(() => _emailNotifications = value),
+                                  onChanged: (value) => setState(
+                                    () => _emailNotifications = value,
+                                  ),
                                 ),
                               ],
                             ),
@@ -384,7 +426,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   spacing: 8,
                                   runSpacing: 8,
                                   children: [
-                                    _choiceChip('system', _t('Theo hệ thống', 'System')),
+                                    _choiceChip(
+                                      'system',
+                                      _t('Theo hệ thống', 'System'),
+                                    ),
                                     _choiceChip('light', _t('Sáng', 'Light')),
                                     _choiceChip('dark', _t('Tối', 'Dark')),
                                   ],
@@ -410,11 +455,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ],
                               onChanged: (value) {
                                 final next = value ?? 'vi';
-                                setState(() => _languageCode = next);
-                                AppPreferences.apply(
-                                  themeMode: _themeMode,
-                                  languageCode: next,
-                                );
+                                _updatePrefsOptimistically(lang: next);
                               },
                               decoration: InputDecoration(
                                 filled: true,
@@ -436,7 +477,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           const SizedBox(height: 14),
                           _sectionCard(
-                            title: 'Về ứng dụng',
+                            title: _t('Về ứng dụng', 'About'),
                             icon: Icons.info_outline_rounded,
                             child: Container(
                               padding: const EdgeInsets.all(14),
@@ -447,14 +488,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   color: const Color(0xFFCFDBF3),
                                 ),
                               ),
-                              child: const Row(
+                              child: Row(
                                 children: [
-                                  Icon(Icons.apps_rounded, color: Color(0xFF2859D6)),
+                                  Icon(
+                                    Icons.apps_rounded,
+                                    color: Color(0xFF2859D6),
+                                  ),
                                   SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
-                                      'KanbanFlow\nPhiên bản 1.0.0',
-                                      style: TextStyle(
+                                      'TaskMate\n${_t('Phiên bản', 'Version')} 1.0.0',
+                                      style: const TextStyle(
                                         height: 1.4,
                                         color: Color(0xFF1D2E45),
                                       ),
@@ -506,9 +550,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: Colors.white,
                   ),
                 )
-              : const Text(
-                  'Lưu',
-                  style: TextStyle(
+              : Text(
+                  _t('Lưu', 'Save'),
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
                   ),
@@ -638,13 +682,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _choiceChip(String value, String label) {
     final selected = _themeMode == value;
     return GestureDetector(
-      onTap: () {
-        setState(() => _themeMode = value);
-        AppPreferences.apply(
-          themeMode: value,
-          languageCode: _languageCode,
-        );
-      },
+      onTap: () => _updatePrefsOptimistically(theme: value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -673,5 +711,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Timer? _prefDebounce;
+  void _updatePrefsOptimistically({String? theme, String? lang}) {
+    setState(() {
+      if (theme != null) _themeMode = theme;
+      if (lang != null) _languageCode = lang;
+    });
+
+    _prefDebounce?.cancel();
+    _prefDebounce = Timer(const Duration(milliseconds: 300), () {
+      AppPreferences.apply(themeMode: _themeMode, languageCode: _languageCode);
+    });
   }
 }

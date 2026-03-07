@@ -20,6 +20,7 @@ import '../widgets/empty_dashboard_view.dart';
 import '../widgets/task_card.dart';
 import '../widgets/board_member_dialog.dart';
 import 'workspace_menu_screen.dart';
+import '../../app_preferences.dart';
 
 class BoardScreen extends StatefulWidget {
   const BoardScreen({super.key});
@@ -29,7 +30,8 @@ class BoardScreen extends StatefulWidget {
 }
 
 class _BoardScreenState extends State<BoardScreen> {
-  final NotificationRepository _notificationRepository = NotificationRepository();
+  final NotificationRepository _notificationRepository =
+      NotificationRepository();
   String? selectedBoardId;
   String selectedLandscapeStatus = 'todo';
   String _quickFilter = 'all';
@@ -141,10 +143,16 @@ class _BoardScreenState extends State<BoardScreen> {
         return AlertDialog(
           title: Row(
             children: [
-              const Expanded(child: Text('Thông báo')),
+              Expanded(
+                child: Text(AppPreferences.tr('Thông báo', 'Notifications')),
+              ),
               TextButton(
-                onPressed: _notifications.isEmpty ? null : _markAllNotificationsRead,
-                child: const Text('Đánh dấu đã đọc'),
+                onPressed: _notifications.isEmpty
+                    ? null
+                    : _markAllNotificationsRead,
+                child: Text(
+                  AppPreferences.tr('Đánh dấu đã đọc', 'Mark all as read'),
+                ),
               ),
             ],
           ),
@@ -153,7 +161,12 @@ class _BoardScreenState extends State<BoardScreen> {
             child: _loadingNotifications
                 ? const Center(child: CircularProgressIndicator())
                 : _notifications.isEmpty
-                ? const Text('Chưa có thông báo nào')
+                ? Text(
+                    AppPreferences.tr(
+                      'Chưa có thông báo nào',
+                      'No notifications yet',
+                    ),
+                  )
                 : ListView.separated(
                     shrinkWrap: true,
                     itemCount: _notifications.length,
@@ -165,15 +178,23 @@ class _BoardScreenState extends State<BoardScreen> {
                         title: Text(
                           item.title,
                           style: TextStyle(
-                            fontWeight: item.isRead ? FontWeight.w500 : FontWeight.w700,
+                            fontWeight: item.isRead
+                                ? FontWeight.w500
+                                : FontWeight.w700,
                           ),
                         ),
                         subtitle: Text(item.message),
                         trailing: item.isRead
-                            ? const Icon(Icons.done_all, size: 18, color: Colors.green)
+                            ? const Icon(
+                                Icons.done_all,
+                                size: 18,
+                                color: Colors.green,
+                              )
                             : TextButton(
                                 onPressed: () => _markNotificationRead(item.id),
-                                child: const Text('Đã đọc'),
+                                child: Text(
+                                  AppPreferences.tr('Đã đọc', 'Read'),
+                                ),
                               ),
                       );
                     },
@@ -182,7 +203,7 @@ class _BoardScreenState extends State<BoardScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Đóng'),
+              child: Text(AppPreferences.tr('Đóng', 'Close')),
             ),
           ],
         );
@@ -208,7 +229,10 @@ class _BoardScreenState extends State<BoardScreen> {
     if (_quickFilter == 'overdue') {
       final now = DateTime.now();
       return tasks
-          .where((t) => t.dueAt != null && t.status != 'done' && t.dueAt!.isBefore(now))
+          .where(
+            (t) =>
+                t.dueAt != null && t.status != 'done' && t.dueAt!.isBefore(now),
+          )
           .toList();
     }
     return tasks.where((t) => t.status == _quickFilter).toList();
@@ -243,10 +267,10 @@ class _BoardScreenState extends State<BoardScreen> {
   }
 
   String _statusTitle(String status) {
-    if (status == 'todo') return 'Cần làm';
-    if (status == 'doing') return 'Đang làm';
-    if (status == 'done') return 'Hoàn thành';
-    if (status == 'overdue') return 'Quá hạn';
+    if (status == 'todo') return AppPreferences.tr('Cần làm', 'To Do');
+    if (status == 'doing') return AppPreferences.tr('Đang làm', 'Doing');
+    if (status == 'done') return AppPreferences.tr('Hoàn thành', 'Completed');
+    if (status == 'overdue') return AppPreferences.tr('Quá hạn', 'Overdue');
     return status;
   }
 
@@ -294,7 +318,7 @@ class _BoardScreenState extends State<BoardScreen> {
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.person_outline_rounded),
-            tooltip: 'Trang cá nhân',
+            tooltip: AppPreferences.tr('Trang cá nhân', 'My profile'),
             onPressed: () {
               setState(() {
                 selectedBoardId = null;
@@ -307,7 +331,10 @@ class _BoardScreenState extends State<BoardScreen> {
               ? TextField(
                   controller: searchController,
                   decoration: InputDecoration(
-                    hintText: 'Tìm kiếm công việc...',
+                    hintText: AppPreferences.tr(
+                      'Tìm kiếm công việc...',
+                      'Search tasks...',
+                    ),
                     border: InputBorder.none,
                     hintStyle: TextStyle(color: Colors.grey[400]),
                   ),
@@ -315,7 +342,7 @@ class _BoardScreenState extends State<BoardScreen> {
                   autofocus: true,
                 )
               : const Text(
-                  'KanbanFlow',
+                  'TaskMate',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.5,
@@ -324,13 +351,18 @@ class _BoardScreenState extends State<BoardScreen> {
           centerTitle: !isSearching,
           actions: [
             IconButton(
-              tooltip: 'Thông báo',
+              tooltip: AppPreferences.tr('Thông báo', 'Notifications'),
               onPressed: () async {
                 await _loadNotificationSetting();
                 if (!_inAppNotificationsEnabled) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Thông báo trong app đang tắt trong Cài đặt'),
+                    SnackBar(
+                      content: Text(
+                        AppPreferences.tr(
+                          'Thông báo trong ứng dụng đang tắt trong Cài đặt',
+                          'In-app notifications are disabled in Settings',
+                        ),
+                      ),
                     ),
                   );
                   return;
@@ -348,12 +380,18 @@ class _BoardScreenState extends State<BoardScreen> {
                       right: -4,
                       top: -4,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.redAccent,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        constraints: const BoxConstraints(minWidth: 18, minHeight: 14),
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 14,
+                        ),
                         child: Text(
                           _unreadNotificationCount > 99
                               ? '99+'
@@ -386,7 +424,7 @@ class _BoardScreenState extends State<BoardScreen> {
                     }
                     return IconButton(
                       icon: const Icon(Icons.group_add_outlined),
-                      tooltip: 'Thành viên',
+                      tooltip: AppPreferences.tr('Thành viên', 'Members'),
                       onPressed: () {
                         showDialog(
                           context: context,
@@ -415,7 +453,7 @@ class _BoardScreenState extends State<BoardScreen> {
               },
             ),
             PopupMenuButton<String>(
-              tooltip: 'Bộ lọc nhanh',
+              tooltip: AppPreferences.tr('Bộ lọc nhanh', 'Quick filter'),
               icon: const Icon(Icons.tune_rounded),
               initialValue: _quickFilter,
               onSelected: (value) {
@@ -426,12 +464,27 @@ class _BoardScreenState extends State<BoardScreen> {
                   }
                 });
               },
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'all', child: Text('Tất cả')),
-                PopupMenuItem(value: 'mine', child: Text('Việc của tôi')),
-                PopupMenuItem(value: 'overdue', child: Text('Quá hạn')),
-                PopupMenuItem(value: 'doing', child: Text('Đang làm')),
-                PopupMenuItem(value: 'done', child: Text('Hoàn thành')),
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'all',
+                  child: Text(AppPreferences.tr('Tất cả', 'All')),
+                ),
+                PopupMenuItem(
+                  value: 'mine',
+                  child: Text(AppPreferences.tr('Việc của tôi', 'My tasks')),
+                ),
+                PopupMenuItem(
+                  value: 'overdue',
+                  child: Text(AppPreferences.tr('Quá hạn', 'Overdue')),
+                ),
+                PopupMenuItem(
+                  value: 'doing',
+                  child: Text(AppPreferences.tr('Đang làm', 'Doing')),
+                ),
+                PopupMenuItem(
+                  value: 'done',
+                  child: Text(AppPreferences.tr('Hoàn thành', 'Completed')),
+                ),
               ],
             ),
             IconButton(
@@ -461,9 +514,9 @@ class _BoardScreenState extends State<BoardScreen> {
             : FloatingActionButton.extended(
                 onPressed: () => _showAddTaskDialog(context),
                 icon: const Icon(Icons.add, color: Colors.white),
-                label: const Text(
-                  'Thêm thẻ',
-                  style: TextStyle(
+                label: Text(
+                  AppPreferences.tr('Thêm thẻ', 'Add card'),
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
@@ -593,9 +646,17 @@ class _BoardScreenState extends State<BoardScreen> {
             },
           );
         } else if (state is TaskError) {
-          return Center(child: Text('Lỗi: ${state.message}'));
+          return Center(
+            child: Text(
+              '${AppPreferences.tr('Lỗi', 'Error')}: ${state.message}',
+            ),
+          );
         }
-        return const Center(child: Text('Chưa có dữ liệu'));
+        return Center(
+          child: Text(
+            AppPreferences.tr('Chưa có dữ liệu', 'No data available'),
+          ),
+        );
       },
     );
   }
@@ -605,15 +666,15 @@ class _BoardScreenState extends State<BoardScreen> {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          _filterChip('all', 'Tất cả'),
+          _filterChip('all', AppPreferences.tr('Tất cả', 'All')),
           const SizedBox(width: 8),
-          _filterChip('mine', 'Việc của tôi'),
+          _filterChip('mine', AppPreferences.tr('Việc của tôi', 'My tasks')),
           const SizedBox(width: 8),
-          _filterChip('overdue', 'Quá hạn'),
+          _filterChip('overdue', AppPreferences.tr('Quá hạn', 'Overdue')),
           const SizedBox(width: 8),
-          _filterChip('doing', 'Đang làm'),
+          _filterChip('doing', AppPreferences.tr('Đang làm', 'Doing')),
           const SizedBox(width: 8),
-          _filterChip('done', 'Hoàn thành'),
+          _filterChip('done', AppPreferences.tr('Hoàn thành', 'Completed')),
         ],
       ),
     );
@@ -674,7 +735,9 @@ class _BoardScreenState extends State<BoardScreen> {
                   strokeWidth: 9,
                   strokeCap: StrokeCap.round,
                   backgroundColor: const Color(0xFFE2E8F0),
-                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF2563EB),
+                  ),
                 ),
                 Container(
                   width: 72,
@@ -696,9 +759,9 @@ class _BoardScreenState extends State<BoardScreen> {
                       ),
                     ),
                     const SizedBox(height: 1),
-                    const Text(
-                      'Done',
-                      style: TextStyle(
+                    Text(
+                      AppPreferences.tr('Xong', 'Done'),
+                      style: const TextStyle(
                         fontSize: 10,
                         color: Color(0xFF64748B),
                         fontWeight: FontWeight.w600,
@@ -715,15 +778,33 @@ class _BoardScreenState extends State<BoardScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _miniStat('Tổng', total, const Color(0xFF334155)),
                 _miniStat(
-                  _quickFilter == 'mine' ? 'Việc của tôi' : 'Cần làm',
+                  AppPreferences.tr('Tổng', 'Total'),
+                  total,
+                  const Color(0xFF334155),
+                ),
+                _miniStat(
+                  _quickFilter == 'mine'
+                      ? AppPreferences.tr('Việc của tôi', 'My tasks')
+                      : AppPreferences.tr('Cần làm', 'To Do'),
                   _quickFilter == 'mine' ? total : todo,
                   Colors.blueAccent,
                 ),
-                _miniStat('Đang làm', doing, Colors.orangeAccent),
-                _miniStat('Hoàn thành', done, Colors.teal),
-                _miniStat('Quá hạn', overdue, Colors.redAccent),
+                _miniStat(
+                  AppPreferences.tr('Đang làm', 'Doing'),
+                  doing,
+                  Colors.orangeAccent,
+                ),
+                _miniStat(
+                  AppPreferences.tr('Hoàn thành', 'Completed'),
+                  done,
+                  Colors.teal,
+                ),
+                _miniStat(
+                  AppPreferences.tr('Quá hạn', 'Overdue'),
+                  overdue,
+                  Colors.redAccent,
+                ),
               ],
             ),
           ),
@@ -760,7 +841,8 @@ class _BoardScreenState extends State<BoardScreen> {
     final tasksCount = _tasksByStatus(allTasks, status).length;
 
     return DragTarget<Task>(
-      onWillAcceptWithDetails: (details) => status != 'overdue' && details.data.status != status,
+      onWillAcceptWithDetails: (details) =>
+          status != 'overdue' && details.data.status != status,
       onAcceptWithDetails: (details) {
         if (status == 'overdue') return;
         final droppedTask = details.data;
@@ -864,7 +946,8 @@ class _BoardScreenState extends State<BoardScreen> {
     final accentColor = _statusColor(status);
 
     return DragTarget<Task>(
-      onWillAcceptWithDetails: (details) => status != 'overdue' && details.data.status != status,
+      onWillAcceptWithDetails: (details) =>
+          status != 'overdue' && details.data.status != status,
       onAcceptWithDetails: (details) {
         if (status == 'overdue') return;
         final droppedTask = details.data;
@@ -962,7 +1045,8 @@ class _BoardScreenState extends State<BoardScreen> {
     final tasks = _tasksByStatus(allTasks, status);
 
     return DragTarget<Task>(
-      onWillAcceptWithDetails: (details) => status != 'overdue' && details.data.status != status,
+      onWillAcceptWithDetails: (details) =>
+          status != 'overdue' && details.data.status != status,
       onAcceptWithDetails: (details) {
         if (status == 'overdue') return;
         final droppedTask = details.data;
@@ -1117,63 +1201,63 @@ class _BoardScreenState extends State<BoardScreen> {
         child: SingleChildScrollView(
           child: StatefulBuilder(
             builder: (context, setDialogState) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            title: const Text(
-              'Thêm Bảng mới',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            content: SizedBox(
-              width: 400, // Định hình chiều rộng tối đa
-              child: TextField(
-                controller: titleController,
-                decoration: InputDecoration(
-                  labelText: 'Tên Bảng',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text(
+                'Thêm Bảng mới',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              content: SizedBox(
+                width: 400, // Định hình chiều rộng tối đa
+                child: TextField(
+                  controller: titleController,
+                  decoration: InputDecoration(
+                    labelText: 'Tên Bảng',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[50],
                   ),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                ),
-                autofocus: true,
-              ),
-            ),
-            actionsPadding: const EdgeInsets.all(16),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text(
-                  'Hủy',
-                  style: TextStyle(color: Colors.black54),
+                  autofocus: true,
                 ),
               ),
-              ElevatedButton(
-                onPressed: () {
-                  if (titleController.text.trim().isEmpty) return;
-                  final authState = context.read<AuthBloc>().state;
-                  final userId = authState is Authenticated
-                      ? authState.user.id
-                      : '';
-                  final board = Board(
-                    id: const Uuid().v4(),
-                    title: titleController.text.trim(),
-                    ownerId: userId,
-                    createdAt: DateTime.now().toIso8601String(),
-                  );
-                  context.read<BoardBloc>().add(AddBoardEvent(board));
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+              actionsPadding: const EdgeInsets.all(16),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Hủy',
+                    style: TextStyle(color: Colors.black54),
                   ),
                 ),
-                child: const Text('Thêm'),
-              ),
-            ],
+                ElevatedButton(
+                  onPressed: () {
+                    if (titleController.text.trim().isEmpty) return;
+                    final authState = context.read<AuthBloc>().state;
+                    final userId = authState is Authenticated
+                        ? authState.user.id
+                        : '';
+                    final board = Board(
+                      id: const Uuid().v4(),
+                      title: titleController.text.trim(),
+                      ownerId: userId,
+                      createdAt: DateTime.now().toIso8601String(),
+                    );
+                    context.read<BoardBloc>().add(AddBoardEvent(board));
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text('Thêm'),
+                ),
+              ],
             ),
           ),
         ),
@@ -1385,11 +1469,11 @@ class _BoardScreenState extends State<BoardScreen> {
                                 selectedDueAt == null
                                     ? 'Han hoan thanh (khong bat buoc)'
                                     : 'Han: '
-                                        '${selectedDueAt!.day.toString().padLeft(2, '0')}/'
-                                        '${selectedDueAt!.month.toString().padLeft(2, '0')}/'
-                                        '${selectedDueAt!.year} '
-                                        '${selectedDueAt!.hour.toString().padLeft(2, '0')}:'
-                                        '${selectedDueAt!.minute.toString().padLeft(2, '0')}',
+                                          '${selectedDueAt!.day.toString().padLeft(2, '0')}/'
+                                          '${selectedDueAt!.month.toString().padLeft(2, '0')}/'
+                                          '${selectedDueAt!.year} '
+                                          '${selectedDueAt!.hour.toString().padLeft(2, '0')}:'
+                                          '${selectedDueAt!.minute.toString().padLeft(2, '0')}',
                                 style: TextStyle(
                                   color: selectedDueAt == null
                                       ? const Color(0xFF64748B)
@@ -1402,9 +1486,8 @@ class _BoardScreenState extends State<BoardScreen> {
                             ),
                             if (selectedDueAt != null)
                               InkWell(
-                                onTap: () => setDialogState(
-                                  () => selectedDueAt = null,
-                                ),
+                                onTap: () =>
+                                    setDialogState(() => selectedDueAt = null),
                                 borderRadius: BorderRadius.circular(20),
                                 child: const Padding(
                                   padding: EdgeInsets.all(4),

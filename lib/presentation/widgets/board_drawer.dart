@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../app_preferences.dart';
 import '../../domain/entities/board.dart';
 import '../blocs/auth/auth_bloc.dart';
 import '../blocs/auth/auth_event.dart';
@@ -65,24 +66,24 @@ class BoardDrawer extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'KANBANFLOW',
-                        style: TextStyle(
+                        'TASKMATE',
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 18,
                           fontWeight: FontWeight.w900,
-                          letterSpacing: 2.0, // Tech vibe
+                          letterSpacing: 2.0,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
-                        'WORKSPACE',
-                        style: TextStyle(
-                          color: Color(0xFF64748B), // Slate 500
+                        AppPreferences.tr('KHÔNG GIAN LÀM VIỆC', 'WORKSPACE'),
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 1.5,
@@ -96,11 +97,11 @@ class BoardDrawer extends StatelessWidget {
           ),
 
           // Projects/Boards List
-          const Padding(
-            padding: EdgeInsets.only(left: 24, top: 24, bottom: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 24, top: 24, bottom: 8),
             child: Text(
-              'DỰ ÁN CỦA BẠN',
-              style: TextStyle(
+              AppPreferences.tr('DỰ ÁN CỦA BẠN', 'YOUR PROJECTS'),
+              style: const TextStyle(
                 color: Color(0xFF64748B),
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
@@ -118,10 +119,13 @@ class BoardDrawer extends StatelessWidget {
                 } else if (state is BoardLoaded) {
                   final boards = state.boards;
                   if (boards.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Text(
-                        'Chưa có dữ liệu trạm.',
-                        style: TextStyle(color: Color(0xFF64748B)),
+                        AppPreferences.tr(
+                          'Chưa có dữ liệu bảng.',
+                          'No board data available.',
+                        ),
+                        style: const TextStyle(color: Color(0xFF64748B)),
                       ),
                     );
                   }
@@ -246,7 +250,7 @@ class BoardDrawer extends StatelessWidget {
                 } else if (state is BoardError) {
                   return Center(
                     child: Text(
-                      'Lỗi: ${state.message}',
+                      '${AppPreferences.tr('Lỗi', 'Error')}: ${state.message}',
                       style: const TextStyle(color: Colors.redAccent),
                     ),
                   );
@@ -275,18 +279,18 @@ class BoardDrawer extends StatelessWidget {
                     width: 1.5,
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.add_circle_outline_rounded,
                       color: Color(0xFF60A5FA),
                       size: 20,
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Text(
-                      'KHỞI TẠO BẢNG',
-                      style: TextStyle(
+                      AppPreferences.tr('KHỞI TẠO BẢNG', 'CREATE BOARD'),
+                      style: const TextStyle(
                         color: Color(0xFF60A5FA),
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.0,
@@ -323,18 +327,18 @@ class BoardDrawer extends StatelessWidget {
                     width: 1.5,
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.logout_rounded,
                       color: Colors.redAccent,
                       size: 20,
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Text(
-                      'ĐĂNG XUẤT',
-                      style: TextStyle(
+                      AppPreferences.tr('ĐĂNG XUẤT', 'LOGOUT'),
+                      style: const TextStyle(
                         color: Colors.redAccent,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.0,

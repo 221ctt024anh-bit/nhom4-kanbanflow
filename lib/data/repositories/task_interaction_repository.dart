@@ -93,7 +93,9 @@ class TaskInteractionRepository {
           fileOptions: FileOptions(contentType: contentType, upsert: false),
         );
 
-    final publicUrl = _client.storage.from(attachmentsBucket).getPublicUrl(filePath);
+    final publicUrl = _client.storage
+        .from(attachmentsBucket)
+        .getPublicUrl(filePath);
     final inserted = await _client
         .from('task_attachments')
         .insert({
@@ -119,13 +121,18 @@ class TaskInteractionRepository {
 
   Future<void> deleteAttachment(TaskAttachment attachment) async {
     if (attachment.filePath.isNotEmpty) {
-      await _client.storage.from(attachmentsBucket).remove([attachment.filePath]);
+      await _client.storage.from(attachmentsBucket).remove([
+        attachment.filePath,
+      ]);
     }
     await _client.from('task_attachments').delete().eq('id', attachment.id);
   }
 
   Future<(double average, int count)> getRatingStats(String taskId) async {
-    final response = await _client.from('task_ratings').select('rating').eq('task_id', taskId);
+    final response = await _client
+        .from('task_ratings')
+        .select('rating')
+        .eq('task_id', taskId);
     final rows = response as List;
     if (rows.isEmpty) return (0.0, 0);
 
@@ -164,13 +171,10 @@ class TaskInteractionRepository {
     required String userId,
     required int rating,
   }) async {
-    await _client.from('task_ratings').upsert(
-      {
-        'task_id': taskId,
-        'user_id': userId,
-        'rating': rating,
-      },
-      onConflict: 'task_id,user_id',
-    );
+    await _client.from('task_ratings').upsert({
+      'task_id': taskId,
+      'user_id': userId,
+      'rating': rating,
+    }, onConflict: 'task_id,user_id');
   }
 }
