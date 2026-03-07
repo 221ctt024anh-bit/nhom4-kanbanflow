@@ -9,12 +9,23 @@ import 'data/repositories/board_repository_impl.dart';
 import 'domain/repositories/board_repository.dart';
 import 'domain/usecases/board_usecases.dart';
 import 'presentation/blocs/board_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'data/repositories/auth_repository_impl.dart';
+import 'domain/repositories/auth_repository.dart';
+import 'presentation/blocs/auth/auth_bloc.dart';
+
 // (Nhớ check lại đường dẫn import file task_bloc của bạn cho chuẩn nhé)
 
 final sl = GetIt.instance; // sl viết tắt của Service Locator
 
 Future<void> init() async {
+  // 0. Khởi tạo core (Supabase)
+  sl.registerLazySingleton<SupabaseClient>(() => Supabase.instance.client);
+  sl.registerLazySingleton<LocalDatabase>(() => LocalDatabase());
+
   // 1. Khởi tạo BLoC (Factory: mỗi lần gọi tạo 1 instance mới)
+  sl.registerFactory(() => AuthBloc(authRepository: sl()));
   sl.registerFactory(
     () => TaskBloc(
       getTasks: sl(),
@@ -44,13 +55,13 @@ Future<void> init() async {
   sl.registerLazySingleton(() => DeleteBoard(sl()));
 
   // 3. Khởi tạo Repository
+  sl.registerLazySingleton<AuthRepository>(
+    () => AuthRepositoryImpl(supabaseClient: sl()),
+  );
   sl.registerLazySingleton<TaskRepository>(
-    () => TaskRepositoryImpl(localDatabase: sl()),
+    () => TaskRepositoryImpl(supabaseClient: sl(), localDatabase: sl()),
   );
   sl.registerLazySingleton<BoardRepository>(
-    () => BoardRepositoryImpl(localDatabase: sl()),
+    () => BoardRepositoryImpl(supabaseClient: sl(), localDatabase: sl()),
   );
-
-  // 4. Khởi tạo Database Data sources
-  sl.registerLazySingleton<LocalDatabase>(() => LocalDatabase());
 }

@@ -1,0 +1,8 @@
+{
+    "dart.env": {
+        "PUB_CACHE": "E:\\PubCache"
+    },
+    "terminal.integrated.env.windows": {
+        "PUB_CACHE": "E:\\PubCache"
+    }
+}

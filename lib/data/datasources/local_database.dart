@@ -1,17 +1,33 @@
 import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:path/path.dart';
-import '../models/task_model.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart'
+    show databaseFactoryFfi, sqfliteFfiInit;
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+
 import '../models/board_model.dart';
+import '../models/task_model.dart';
+
+class PendingOperation {
+  final int id;
+  final String entity;
+  final String operation;
+  final String payload;
+
+  const PendingOperation({
+    required this.id,
+    required this.entity,
+    required this.operation,
+    required this.payload,
+  });
+}
 
 class LocalDatabase {
   static Database? _database;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('kanbanflow.db');
+    _database = await _initDB('taskmate.db');
     return _database!;
   }
 
@@ -24,15 +40,17 @@ class LocalDatabase {
 
   Future<Database> _initDB(String filePath) async {
     if (kIsWeb) {
-      // Khởi tạo FFI Web
       databaseFactory = databaseFactoryFfiWeb;
-      return await databaseFactory.openDatabase(
+      return databaseFactory.openDatabase(
         filePath,
-        options: OpenDatabaseOptions(version: 1, onCreate: _createDB),
+        options: OpenDatabaseOptions(
+          version: 3,
+          onCreate: _createDB,
+          onUpgrade: _onUpgrade,
+        ),
       );
     }
 
-    // Kích hoạt FFI nếu đang chạy trên Windows/Linux/Mac (cực kỳ quan trọng để chạy Test)
     if (defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.linux ||
         defaultTargetPlatform == TargetPlatform.macOS) {
@@ -43,27 +61,100 @@ class LocalDatabase {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(path, version: 1, onCreate: _createDB);
+    return openDatabase(
+      path,
+      version: 3,
+      onCreate: _createDB,
+      onUpgrade: _onUpgrade,
+    );
   }
 
-  Future _createDB(Database db, int version) async {
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('DROP TABLE IF EXISTS pending_ops');
+      await db.execute('DROP TABLE IF EXISTS tasks');
+      await db.execute('DROP TABLE IF EXISTS boards');
+      await _createDB(db, 2);
+    }
+    if (oldVersion < 3) {
+      try {
+        await db.execute('ALTER TABLE tasks ADD COLUMN due_at TEXT');
+      } catch (_) {
+        // Column may already exist.
+      }
+    }
+  }
+
+  Future<void> _createDB(Database db, int version) async {
     await db.execute('''
-      CREATE TABLE boards (
+      CREATE TABLE IF NOT EXISTS boards (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
-        createdAt TEXT NOT NULL
+        owner_id TEXT NOT NULL,
+        created_at TEXT NOT NULL
       )
     ''');
+
     await db.execute('''
-      CREATE TABLE tasks (
+      CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
-        boardId TEXT NOT NULL,
+        board_id TEXT NOT NULL,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
         status TEXT NOT NULL,
-        FOREIGN KEY (boardId) REFERENCES boards (id) ON DELETE CASCADE
+        assignee_id TEXT,
+        creator_id TEXT,
+        due_at TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (board_id) REFERENCES boards (id) ON DELETE CASCADE
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pending_ops (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<List<BoardModel>> getBoards() async {
+    final db = await database;
+    final result = await db.query('boards', orderBy: 'created_at DESC');
+    return result
+        .map((row) => BoardModel.fromMap(Map<String, dynamic>.from(row)))
+        .toList();
+  }
+
+  Future<void> replaceBoards(List<BoardModel> boards) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('boards');
+      for (final board in boards) {
+        await txn.insert(
+          'boards',
+          board.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
+  Future<int> upsertBoard(BoardModel board) async {
+    final db = await database;
+    return db.insert(
+      'boards',
+      board.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<int> deleteBoard(String id) async {
+    final db = await database;
+    return db.delete('boards', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<List<TaskModel>> getTasks({
@@ -73,88 +164,100 @@ class LocalDatabase {
   }) async {
     final db = await database;
 
-    List<String> whereClauses = [];
-    List<dynamic> whereArgs = [];
+    final whereClauses = <String>[];
+    final whereArgs = <Object?>[];
 
     if (boardId != null) {
-      whereClauses.add('boardId = ?');
+      whereClauses.add('board_id = ?');
       whereArgs.add(boardId);
     }
-
     if (status != null) {
       whereClauses.add('status = ?');
       whereArgs.add(status);
     }
-
     if (query != null && query.isNotEmpty) {
       whereClauses.add('title LIKE ?');
-      whereArgs.add('%\$query%');
+      whereArgs.add('%$query%');
     }
-
-    String? whereString = whereClauses.isNotEmpty
-        ? whereClauses.join(' AND ')
-        : null;
 
     final result = await db.query(
       'tasks',
-      where: whereString,
-      whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
+      where: whereClauses.isEmpty ? null : whereClauses.join(' AND '),
+      whereArgs: whereArgs.isEmpty ? null : whereArgs,
+      orderBy: 'created_at DESC',
     );
-    return result.map((map) => TaskModel.fromMap(map)).toList();
+    return result
+        .map((row) => TaskModel.fromMap(Map<String, dynamic>.from(row)))
+        .toList();
   }
 
-  Future<int> insertTask(TaskModel task) async {
+  Future<void> replaceTasksForBoard(
+    String boardId,
+    List<TaskModel> tasks,
+  ) async {
     final db = await database;
-    return await db.insert(
+    await db.transaction((txn) async {
+      await txn.delete('tasks', where: 'board_id = ?', whereArgs: [boardId]);
+      for (final task in tasks) {
+        await txn.insert(
+          'tasks',
+          task.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
+  Future<int> upsertTask(TaskModel task) async {
+    final db = await database;
+    return db.insert(
       'tasks',
       task.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  Future<int> updateTask(TaskModel task) async {
-    final db = await database;
-    return await db.update(
-      'tasks',
-      task.toMap(),
-      where: 'id = ?',
-      whereArgs: [task.id],
     );
   }
 
   Future<int> deleteTask(String id) async {
     final db = await database;
-    return await db.delete('tasks', where: 'id = ?', whereArgs: [id]);
+    return db.delete('tasks', where: 'id = ?', whereArgs: [id]);
   }
 
-  // BOARDS CRUD
-  Future<List<BoardModel>> getBoards() async {
+  Future<int> enqueueOperation({
+    required String entity,
+    required String operation,
+    required String payload,
+  }) async {
     final db = await database;
-    final result = await db.query('boards', orderBy: 'createdAt ASC');
-    return result.map((map) => BoardModel.fromMap(map)).toList();
+    return db.insert('pending_ops', {
+      'entity': entity,
+      'operation': operation,
+      'payload': payload,
+      'created_at': DateTime.now().toIso8601String(),
+    });
   }
 
-  Future<int> insertBoard(BoardModel board) async {
+  Future<List<PendingOperation>> getPendingOperations(String entity) async {
     final db = await database;
-    return await db.insert(
-      'boards',
-      board.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+    final rows = await db.query(
+      'pending_ops',
+      where: 'entity = ?',
+      whereArgs: [entity],
+      orderBy: 'id ASC',
     );
+    return rows
+        .map(
+          (row) => PendingOperation(
+            id: row['id'] as int,
+            entity: row['entity'] as String,
+            operation: row['operation'] as String,
+            payload: row['payload'] as String,
+          ),
+        )
+        .toList();
   }
 
-  Future<int> updateBoard(BoardModel board) async {
+  Future<int> removePendingOperation(int id) async {
     final db = await database;
-    return await db.update(
-      'boards',
-      board.toMap(),
-      where: 'id = ?',
-      whereArgs: [board.id],
-    );
-  }
-
-  Future<int> deleteBoard(String id) async {
-    final db = await database;
-    return await db.delete('boards', where: 'id = ?', whereArgs: [id]);
+    return db.delete('pending_ops', where: 'id = ?', whereArgs: [id]);
   }
 }

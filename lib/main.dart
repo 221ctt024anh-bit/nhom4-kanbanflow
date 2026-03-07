@@ -1,21 +1,40 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
+
+import 'app_preferences.dart';
+import 'core/constants/supabase_constants.dart';
 import 'injection_container.dart' as di;
-import 'presentation/blocs/task_bloc.dart';
-import 'presentation/blocs/task_event.dart';
+import 'data/repositories/user_settings_repository.dart';
+import 'presentation/blocs/auth/auth_bloc.dart';
+import 'presentation/blocs/auth/auth_event.dart';
+import 'presentation/blocs/auth/auth_state.dart';
 import 'presentation/blocs/board_bloc.dart';
 import 'presentation/blocs/board_event.dart';
-import 'presentation/screens/board_screen.dart'; // Thay bằng đường dẫn file màn hình của bạn
+import 'presentation/blocs/task_bloc.dart';
+import 'presentation/blocs/task_event.dart';
+import 'presentation/screens/board_screen.dart';
+import 'presentation/screens/friends_screen.dart';
+import 'presentation/screens/login_screen.dart';
+import 'presentation/screens/my_profile_screen.dart';
+import 'presentation/screens/reset_password_screen.dart';
+import 'presentation/screens/settings_screen.dart';
+import 'data/repositories/friend_repository.dart';
 
-void main() async {
-  // 1. Đảm bảo các dịch vụ của Flutter đã sẵn sàng
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 2. Cấu hình SQLite cho Desktop (Windows/macOS/Linux)
+  await Supabase.initialize(
+    url: SupabaseConstants.supabaseUrl,
+    anonKey: SupabaseConstants.supabaseAnonKey,
+  );
+
   if (!kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.windows ||
           defaultTargetPlatform == TargetPlatform.linux ||
@@ -24,21 +43,129 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
-  // 3. Khởi tạo Dependency Injection (Service Locator)
   await di.init();
 
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  StreamSubscription? _authSubscription;
+  bool _openingRecoveryScreen = false;
+  final FriendRepository _friendRepository = FriendRepository();
+  final UserSettingsRepository _settingsRepository = UserSettingsRepository();
+  Timer? _presenceTimer;
+  String? _preferencesLoadedForUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      data,
+    ) async {
+      unawaited(_syncAppPreferences());
+      if (data.event != AuthChangeEvent.passwordRecovery) return;
+      if (_openingRecoveryScreen) return;
+
+      _openingRecoveryScreen = true;
+      await _navigatorKey.currentState?.pushNamed('/reset-password');
+      _openingRecoveryScreen = false;
+    });
+    unawaited(_syncAppPreferences());
+    _startPresenceHeartbeat();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _authSubscription?.cancel();
+    _presenceTimer?.cancel();
+    unawaited(_setPresence(false));
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_setPresence(true));
+    } else if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(_setPresence(false));
+    }
+  }
+
+  void _startPresenceHeartbeat() {
+    unawaited(_setPresence(true));
+    _presenceTimer?.cancel();
+    _presenceTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+      _setPresence(true);
+    });
+  }
+
+  Future<void> _setPresence(bool isOnline) async {
+    try {
+      await _friendRepository.updateMyPresence(isOnline: isOnline);
+    } catch (_) {
+      // ignore presence update errors
+    }
+  }
+
+  Future<void> _syncAppPreferences() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      _preferencesLoadedForUserId = null;
+      AppPreferences.apply(themeMode: 'system', languageCode: 'vi');
+      return;
+    }
+
+    if (_preferencesLoadedForUserId == user.id) return;
+    try {
+      final settings = await _settingsRepository.getSettings(user.id);
+      AppPreferences.apply(
+        themeMode: settings.themeMode,
+        languageCode: settings.languageCode,
+      );
+      _preferencesLoadedForUserId = user.id;
+    } catch (_) {
+      // ignore preference sync errors
+    }
+  }
+
+  static final _lightTheme = ThemeData(
+    primarySwatch: Colors.blue,
+    useMaterial3: true,
+    textTheme: GoogleFonts.interTextTheme(),
+    scaffoldBackgroundColor: const Color(0xFFF4F7FC),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.white,
+      foregroundColor: Colors.black87,
+      elevation: 0,
+      iconTheme: IconThemeData(color: Colors.black87),
+    ),
+  );
+
+  static final _darkTheme = ThemeData(
+    brightness: Brightness.dark,
+    useMaterial3: true,
+    textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+  );
 
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
-        // 4. Cung cấp TaskBloc cho toàn bộ ứng dụng
-        // sl() sẽ tự động tìm kiếm TaskBloc đã đăng ký trong injection_container
+        BlocProvider<AuthBloc>(
+          create: (_) => di.sl<AuthBloc>()..add(CheckAuthStatus()),
+        ),
         BlocProvider<TaskBloc>(
           create: (_) => di.sl<TaskBloc>()..add(LoadTasks()),
         ),
@@ -46,23 +173,43 @@ class MyApp extends StatelessWidget {
           create: (_) => di.sl<BoardBloc>()..add(LoadBoards()),
         ),
       ],
-      child: MaterialApp(
-        title: 'KanbanFlow Nhóm 4',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          useMaterial3: true,
-          textTheme: GoogleFonts.interTextTheme(Theme.of(context).textTheme),
-          scaffoldBackgroundColor: const Color(0xFFF4F7FC),
-          appBarTheme: const AppBarTheme(
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.black87,
-            elevation: 0,
-            iconTheme: IconThemeData(color: Colors.black87),
+      child: ValueListenableBuilder<AppPreferencesState>(
+        valueListenable: AppPreferences.notifier,
+        builder: (context, prefs, _) => MaterialApp(
+          navigatorKey: _navigatorKey,
+          title: 'TaskMate',
+          debugShowCheckedModeBanner: false,
+          routes: {
+            '/reset-password': (_) => const ResetPasswordScreen(),
+            '/settings': (_) => const SettingsScreen(),
+            '/profile': (_) => const MyProfileScreen(),
+            '/friends': (_) => const FriendsScreen(),
+          },
+          locale: prefs.locale,
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          themeMode: prefs.themeMode,
+          theme: _lightTheme,
+          darkTheme: _darkTheme,
+          home: BlocBuilder<AuthBloc, AuthState>(
+            builder: (context, state) {
+              if (state is AuthLoading) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (state is Authenticated) {
+                unawaited(_syncAppPreferences());
+                return const BoardScreen();
+              }
+              return const LoginScreen();
+            },
           ),
         ),
-        // 5. Màn hình chính hiển thị bảng Kanban
-        home: const BoardScreen(),
       ),
     );
   }

@@ -2,20 +2,27 @@ import '../../domain/entities/board.dart';
 
 class BoardModel extends Board {
   const BoardModel({
-    required String id,
-    required String title,
-    required String createdAt,
-  }) : super(id: id, title: title, createdAt: createdAt);
+    required super.id,
+    required super.title,
+    required super.ownerId,
+    required super.createdAt,
+  });
 
   factory BoardModel.fromMap(Map<String, dynamic> map) {
     return BoardModel(
       id: map['id'] as String,
       title: map['title'] as String,
-      createdAt: map['createdAt'] as String,
+      ownerId: map['owner_id'] as String,
+      createdAt: map['created_at'] as String,
     );
   }
 
   Map<String, dynamic> toMap() {
-    return {'id': id, 'title': title, 'createdAt': createdAt};
+    return {
+      'id': id,
+      'title': title,
+      'owner_id': ownerId,
+      'created_at': createdAt,
+    };
   }
 }
