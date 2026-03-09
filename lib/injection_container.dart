@@ -13,6 +13,7 @@ import 'presentation/blocs/board_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'data/repositories/task_interaction_repository.dart';
 import 'data/repositories/friend_repository.dart';
+import 'data/repositories/chat_repository.dart';
 
 import 'data/repositories/auth_repository_impl.dart';
 import 'domain/repositories/auth_repository.dart';
@@ -79,5 +80,8 @@ Future<void> init() async {
   );
   sl.registerLazySingleton<FriendRepository>(
     () => FriendRepository(client: sl(), notificationRepository: sl()),
+  );
+  sl.registerLazySingleton<ChatRepository>(
+    () => ChatRepository(client: sl(), notificationRepository: sl()),
   );
 }

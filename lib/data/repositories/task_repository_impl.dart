@@ -45,6 +45,28 @@ class TaskRepositoryImpl implements TaskRepository {
           .map((e) => TaskModel.fromMap(e as Map<String, dynamic>))
           .toList();
 
+      // Merge with pending operations to ensure local-first consistency
+      final pending = await localDatabase.getPendingOperations('task');
+      for (final op in pending) {
+        try {
+          final payload = jsonDecode(op.payload) as Map<String, dynamic>;
+          if (op.operation == 'add' || op.operation == 'update') {
+            final taskModel = TaskModel.fromMap(payload);
+            final index = tasks.indexWhere((t) => t.id == taskModel.id);
+            if (index != -1) {
+              tasks[index] = taskModel;
+            } else if (op.operation == 'add') {
+              tasks.insert(0, taskModel);
+            }
+          } else if (op.operation == 'delete') {
+            final id = payload['id'] as String?;
+            if (id != null) {
+              tasks.removeWhere((t) => t.id == id);
+            }
+          }
+        } catch (_) {}
+      }
+
       if (boardId != null) {
         await localDatabase.replaceTasksForBoard(boardId, tasks);
       } else {
@@ -75,13 +97,16 @@ class TaskRepositoryImpl implements TaskRepository {
       creatorId: task.creatorId,
       dueAt: task.dueAt,
       createdAt: task.createdAt,
+      checklist: task.checklist,
+      hasAttachments: task.hasAttachments,
+      taskType: task.taskType,
     );
 
     await localDatabase.upsertTask(taskModel);
     try {
       await supabaseClient
           .from('tasks')
-          .upsert(taskModel.toMap(), onConflict: 'id');
+          .upsert(taskModel.toSupabaseMap(), onConflict: 'id');
     } catch (_) {
       await localDatabase.enqueueOperation(
         entity: 'task',
@@ -103,6 +128,9 @@ class TaskRepositoryImpl implements TaskRepository {
       creatorId: task.creatorId,
       dueAt: task.dueAt,
       createdAt: task.createdAt,
+      checklist: task.checklist,
+      hasAttachments: task.hasAttachments,
+      taskType: task.taskType,
     );
 
     await localDatabase.upsertTask(taskModel);
@@ -116,7 +144,7 @@ class TaskRepositoryImpl implements TaskRepository {
 
       await supabaseClient
           .from('tasks')
-          .update(taskModel.toMap())
+          .update(taskModel.toSupabaseMap())
           .eq('id', task.id);
 
       // Notification logic
@@ -165,11 +193,15 @@ class TaskRepositoryImpl implements TaskRepository {
       try {
         final payload = jsonDecode(op.payload) as Map<String, dynamic>;
         if (op.operation == 'add') {
-          await supabaseClient.from('tasks').upsert(payload, onConflict: 'id');
-        } else if (op.operation == 'update') {
+          final taskModel = TaskModel.fromMap(payload);
           await supabaseClient
               .from('tasks')
-              .update(payload)
+              .upsert(taskModel.toSupabaseMap(), onConflict: 'id');
+        } else if (op.operation == 'update') {
+          final taskModel = TaskModel.fromMap(payload);
+          await supabaseClient
+              .from('tasks')
+              .update(taskModel.toSupabaseMap())
               .eq('id', payload['id']);
         } else if (op.operation == 'delete') {
           await supabaseClient.from('tasks').delete().eq('id', payload['id']);

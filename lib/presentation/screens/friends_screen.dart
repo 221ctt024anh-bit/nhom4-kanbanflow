@@ -225,13 +225,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
               children: _friends.map((friend) {
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
-                  onTap: () {
-                    Navigator.push(
+                  onTap: () async {
+                    final result = await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => FriendProfileScreen(friend: friend),
                       ),
                     );
+                    if (result == true) {
+                      _refresh();
+                    }
                   },
                   leading: CircleAvatar(
                     backgroundColor: Colors.blueAccent.withOpacity(0.2),
@@ -283,21 +286,97 @@ class _FriendsScreenState extends State<FriendsScreen> {
                       ),
                     ],
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.chat_bubble_outline_rounded),
-                    tooltip: AppPreferences.tr('Chat', 'Chat'),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ChatScreen(friend: friend),
-                        ),
-                      );
+                  trailing: PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert_rounded),
+                    onSelected: (value) {
+                      if (value == 'chat') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(friend: friend),
+                          ),
+                        );
+                      } else if (value == 'remove') {
+                        _showRemoveDialog(friend);
+                      }
                     },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'chat',
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(AppPreferences.tr('Nhắn tin', 'Chat')),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'remove',
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.person_remove_outlined,
+                              size: 20,
+                              color: Colors.redAccent,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              AppPreferences.tr('Xóa bạn bè', 'Remove Friend'),
+                              style: const TextStyle(color: Colors.redAccent),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }).toList(),
             ),
+    );
+  }
+
+  Future<void> _removeFriend(FriendUser friend) async {
+    try {
+      await _repo.removeFriend(friend.id);
+      _showSnack(AppPreferences.tr('Đã xóa bạn bè.', 'Friend removed.'));
+      await _refresh();
+    } catch (e) {
+      _showSnack(
+        '${AppPreferences.tr('Không thể xóa bạn bè', 'Could not remove friend')}: $e',
+      );
+    }
+  }
+
+  void _showRemoveDialog(FriendUser friend) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(AppPreferences.tr('Xác nhận xóa', 'Confirm removal')),
+        content: Text(
+          AppPreferences.tr(
+            'Bạn có chắc chắn muốn xóa "${friend.displayName ?? friend.email}" khỏi danh sách bạn bè?',
+            'Are you sure you want to remove "${friend.displayName ?? friend.email}" from your friends list?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(AppPreferences.tr('Hủy', 'Cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _removeFriend(friend);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: Text(AppPreferences.tr('Xóa', 'Remove')),
+          ),
+        ],
+      ),
     );
   }
 

@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "supabase";
 
 type EmailJob = {
   id: string;
@@ -10,7 +10,7 @@ type EmailJob = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
+const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY") ?? "";
 const EMAIL_FROM = Deno.env.get("EMAIL_FROM") ?? "";
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const MAX_RETRIES = 5;
@@ -60,33 +60,33 @@ async function reserveJobs(limit: number): Promise<EmailJob[]> {
   return (jobs ?? []) as EmailJob[];
 }
 
-async function sendWithResend(job: EmailJob) {
-  const response = await fetch("https://api.resend.com/emails", {
+async function sendWithBrevo(job: EmailJob) {
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "api-key": BREVO_API_KEY,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: EMAIL_FROM,
-      to: [job.recipient_email],
+      sender: { email: EMAIL_FROM, name: "TaskMate" },
+      to: [{ email: job.recipient_email }],
       subject: job.subject,
-      text: job.body_text,
+      textContent: job.body_text,
     }),
   });
 
-  const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = typeof body?.message === "string" ? body.message : `HTTP ${response.status}`;
-    throw new Error(message);
+    const errorText = await response.text();
+    throw new Error(`Brevo error: ${response.status} ${errorText}`);
   }
 
-  return body?.id as string | undefined;
+  const result = await response.json();
+  return result.messageId ?? "sent";
 }
 
 async function handleJob(job: EmailJob) {
   try {
-    const providerMessageId = await sendWithResend(job);
+    const providerMessageId = await sendWithBrevo(job);
     const { error } = await supabase
       .from("email_jobs")
       .update({
@@ -138,9 +138,9 @@ Deno.serve(async (req) => {
     }
   }
 
-  if (!RESEND_API_KEY || !EMAIL_FROM) {
+  if (!BREVO_API_KEY || !EMAIL_FROM) {
     return new Response(
-      JSON.stringify({ error: "Missing RESEND_API_KEY or EMAIL_FROM in function env" }),
+      JSON.stringify({ error: "Missing BREVO_API_KEY or EMAIL_FROM in function env" }),
       { status: 500, headers: corsHeaders() },
     );
   }

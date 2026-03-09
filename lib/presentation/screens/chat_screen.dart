@@ -7,6 +7,7 @@ import '../../app_preferences.dart';
 import '../../data/repositories/chat_repository.dart';
 import '../../domain/entities/direct_message.dart';
 import '../../domain/entities/friend_user.dart';
+import '../../injection_container.dart';
 
 class ChatScreen extends StatefulWidget {
   final FriendUser friend;
@@ -18,7 +19,7 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final ChatRepository _chatRepository = ChatRepository();
+  final ChatRepository _chatRepository = sl<ChatRepository>();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 

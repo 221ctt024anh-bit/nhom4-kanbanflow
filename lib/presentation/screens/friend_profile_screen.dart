@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../app_preferences.dart';
 
 import '../../domain/entities/friend_user.dart';
+import '../../data/repositories/friend_repository.dart';
+import '../../injection_container.dart';
 import 'chat_screen.dart';
 
 class FriendProfileScreen extends StatefulWidget {
@@ -71,6 +73,8 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
     return '$day/$month/$year $hour:$minute';
   }
 
+  final _friendRepo = sl<FriendRepository>();
+
   Future<void> _loadStats() async {
     final userId = widget.friend.id;
 
@@ -101,7 +105,7 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
         final assignedTasksResponse = await _client
             .from('tasks')
             .select('id,status')
-            .eq('assignee_id', userId);
+            .or('assignee_id.eq.$userId,creator_id.eq.$userId');
         final assigned = assignedTasksResponse as List;
         assignedTasks = assigned.length;
         doneTasks = assigned
@@ -110,11 +114,38 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
       } catch (_) {}
 
       try {
+        // Đếm số lượng bạn bè (tìm cả 2 chiều để chắc chắn không sót)
         final friendResponse = await _client
             .from('friendships')
-            .select('friend_id')
-            .eq('user_id', userId);
-        friendCount = (friendResponse as List).length;
+            .select('user_id')
+            .or('user_id.eq.$userId,friend_id.eq.$userId');
+
+        // Vì lưu 2 chiều nên 1 người bạn sẽ có 2 dòng (A-B và B-A) trong kết quả nếu tìm cả 2 chiều
+        // Nhưng nếu tìm theo userId thì chỉ cần lấy Unique Ids khác với chính mình
+        final rows = friendResponse as List;
+        final friendsSet = <String>{};
+        for (final row in rows) {
+          final map = row as Map<String, dynamic>;
+          if (map['user_id'] != userId) friendsSet.add(map['user_id']);
+          // Thêm logic handle nếu select friend_id
+        }
+        // Cách đơn giản nhất với schema mới (2 dòng):
+        // Chỉ cần tìm eq('user_id', userId) là ra đủ.
+        // Nhưng để handle data cũ (1 dòng), ta lấy distinct list of (user_id, friend_id) excluding userId
+
+        final friendResponse2 = await _client
+            .from('friendships')
+            .select('user_id, friend_id')
+            .or('user_id.eq.$userId,friend_id.eq.$userId');
+
+        final allRelated = friendResponse2 as List;
+        final uniqueFriends = <String>{};
+        for (final item in allRelated) {
+          final m = item as Map<String, dynamic>;
+          if (m['user_id'] != userId) uniqueFriends.add(m['user_id']);
+          if (m['friend_id'] != userId) uniqueFriends.add(m['friend_id']);
+        }
+        friendCount = uniqueFriends.length;
       } catch (_) {}
 
       if (!mounted) return;
@@ -130,6 +161,57 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
         setState(() => _loadingStats = false);
       }
     }
+  }
+
+  Future<void> _removeFriend() async {
+    try {
+      await _friendRepo.removeFriend(widget.friend.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppPreferences.tr('Đã xóa bạn bè.', 'Friend removed.')),
+        ),
+      );
+      Navigator.pop(context, true); // Trả về true để thông báo cần refresh
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${AppPreferences.tr('Không thể xóa bạn bè', 'Could not remove friend')}: $e',
+          ),
+        ),
+      );
+    }
+  }
+
+  void _showRemoveDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(AppPreferences.tr('Xác nhận xóa', 'Confirm removal')),
+        content: Text(
+          AppPreferences.tr(
+            'Bạn có chắc chắn muốn xóa "${widget.friend.displayName ?? widget.friend.email}" khỏi danh sách bạn bè?',
+            'Are you sure you want to remove "${widget.friend.displayName ?? widget.friend.email}" from your friends list?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(AppPreferences.tr('Hủy', 'Cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _removeFriend();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: Text(AppPreferences.tr('Xóa', 'Remove')),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -224,6 +306,20 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                 },
                 icon: const Icon(Icons.chat_bubble_outline_rounded),
                 label: Text(AppPreferences.tr('Nhắn tin', 'Message')),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _showRemoveDialog(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.redAccent,
+                  side: const BorderSide(color: Colors.redAccent),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                icon: const Icon(Icons.person_remove_outlined),
+                label: Text(AppPreferences.tr('Xóa bạn bè', 'Remove Friend')),
               ),
             ),
             const SizedBox(height: 16),

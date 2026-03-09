@@ -12,6 +12,8 @@ import 'app_preferences.dart';
 import 'core/constants/supabase_constants.dart';
 import 'injection_container.dart' as di;
 import 'data/repositories/user_settings_repository.dart';
+import 'core/services/notification_service.dart';
+import 'core/services/supabase_notification_listener.dart';
 import 'presentation/blocs/auth/auth_bloc.dart';
 import 'presentation/blocs/auth/auth_event.dart';
 import 'presentation/blocs/auth/auth_state.dart';
@@ -44,6 +46,7 @@ Future<void> main() async {
   }
 
   await di.init();
+  await NotificationService.init();
 
   runApp(const MyApp());
 }
@@ -76,8 +79,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (_openingRecoveryScreen) return;
 
       _openingRecoveryScreen = true;
-      await _navigatorKey.currentState?.pushNamed('/reset-password');
-      _openingRecoveryScreen = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _navigatorKey.currentState?.pushNamed('/reset-password');
+        _openingRecoveryScreen = false;
+      });
     });
     unawaited(_syncAppPreferences());
     _startPresenceHeartbeat();
@@ -173,41 +178,52 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           create: (_) => di.sl<BoardBloc>()..add(LoadBoards()),
         ),
       ],
-      child: ValueListenableBuilder<AppPreferencesState>(
-        valueListenable: AppPreferences.notifier,
-        builder: (context, prefs, _) => MaterialApp(
-          navigatorKey: _navigatorKey,
-          title: 'TaskMate',
-          debugShowCheckedModeBanner: false,
-          routes: {
-            '/reset-password': (_) => const ResetPasswordScreen(),
-            '/settings': (_) => const SettingsScreen(),
-            '/profile': (_) => const MyProfileScreen(),
-            '/friends': (_) => const FriendsScreen(),
-          },
-          locale: prefs.locale,
-          supportedLocales: const [Locale('vi'), Locale('en')],
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          themeMode: prefs.themeMode,
-          theme: _lightTheme,
-          darkTheme: _darkTheme,
-          home: BlocBuilder<AuthBloc, AuthState>(
-            builder: (context, state) {
-              if (state is AuthLoading) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                );
-              }
-              if (state is Authenticated) {
-                unawaited(_syncAppPreferences());
-                return const BoardScreen();
-              }
-              return const LoginScreen();
+      child: BlocListener<AuthBloc, AuthState>(
+        listener: (context, state) {
+          if (state is Authenticated) {
+            SupabaseNotificationListener.start(state.user.id);
+            // Dọn dẹp stack để không bị kẹt ở màn hình Login/Register
+            _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+          } else if (state is Unauthenticated) {
+            SupabaseNotificationListener.stop();
+          }
+        },
+        child: ValueListenableBuilder<AppPreferencesState>(
+          valueListenable: AppPreferences.notifier,
+          builder: (context, prefs, _) => MaterialApp(
+            navigatorKey: _navigatorKey,
+            title: 'TaskMate',
+            debugShowCheckedModeBanner: false,
+            routes: {
+              '/reset-password': (_) => const ResetPasswordScreen(),
+              '/settings': (_) => const SettingsScreen(),
+              '/profile': (_) => const MyProfileScreen(),
+              '/friends': (_) => const FriendsScreen(),
             },
+            locale: prefs.locale,
+            supportedLocales: const [Locale('vi'), Locale('en')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            themeMode: prefs.themeMode,
+            theme: _lightTheme,
+            darkTheme: _darkTheme,
+            home: BlocBuilder<AuthBloc, AuthState>(
+              builder: (context, state) {
+                if (state is AuthLoading) {
+                  return const Scaffold(
+                    body: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (state is Authenticated) {
+                  unawaited(_syncAppPreferences());
+                  return const BoardScreen();
+                }
+                return const LoginScreen();
+              },
+            ),
           ),
         ),
       ),

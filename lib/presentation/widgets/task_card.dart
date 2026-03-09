@@ -20,6 +20,54 @@ class TaskCard extends StatelessWidget {
         '${dueAt.minute.toString().padLeft(2, '0')}';
   }
 
+  Widget _buildTypeBadge() {
+    String label;
+    IconData icon;
+    Color color;
+
+    if (task.taskType == 'checklist' || task.checklist.isNotEmpty) {
+      label = 'Danh sách';
+      icon = Icons.checklist_rtl_rounded;
+      color = Colors.greenAccent;
+    } else if (task.taskType == 'image') {
+      label = 'Ảnh & Video';
+      icon = Icons.image_rounded;
+      color = Colors.purpleAccent;
+    } else if (task.taskType == 'audio') {
+      label = 'Âm thanh';
+      icon = Icons.keyboard_voice_rounded;
+      color = Colors.redAccent;
+    } else {
+      label = 'Văn bản';
+      icon = Icons.text_snippet_rounded;
+      color = Colors.blueAccent;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color.withOpacity(0.8)),
+          const SizedBox(width: 4),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
+              color: color.withOpacity(0.8),
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isOverdue =
@@ -66,34 +114,75 @@ class TaskCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            task.title,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
-                              color: Colors.black87,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildTypeBadge(),
+                            const SizedBox(height: 6),
+                            Text(
+                              task.title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                color: Color(0xFF1E293B),
+                                height: 1.3,
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
+                      const SizedBox(width: 8),
                       InkWell(
                         onTap: () => context.read<TaskBloc>().add(
                           DeleteTaskEvent(task.id),
                         ),
                         borderRadius: BorderRadius.circular(8),
-                        child: const Padding(
-                          padding: EdgeInsets.all(4.0),
-                          child: Icon(
-                            Icons.close,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(
+                            Icons.close_rounded,
                             color: Colors.black26,
-                            size: 18,
+                            size: 16,
                           ),
                         ),
                       ),
                     ],
                   ),
+                  if (task.checklist.isNotEmpty || task.hasAttachments)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Row(
+                        children: [
+                          if (task.checklist.isNotEmpty) ...[
+                            Icon(
+                              Icons.check_box_outlined,
+                              size: 14,
+                              color: Colors.grey[600],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${task.checklist.where((e) => e.isDone).length}/${task.checklist.length}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            if (task.hasAttachments) const SizedBox(width: 12),
+                          ],
+                          if (task.hasAttachments)
+                            Icon(
+                              Icons.attach_file_rounded,
+                              size: 14,
+                              color: Colors.grey[600],
+                            ),
+                        ],
+                      ),
+                    ),
                   if (task.assigneeId != null && task.assigneeId!.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),

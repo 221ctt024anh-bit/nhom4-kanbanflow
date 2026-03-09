@@ -84,6 +84,10 @@ class TaskInteractionRepository {
     );
   }
 
+  Future<void> deleteComment(String commentId) async {
+    await _client.from('task_comments').delete().eq('id', commentId);
+  }
+
   Future<List<TaskAttachment>> getAttachments(String taskId) async {
     final response = await _client
         .from('task_attachments')

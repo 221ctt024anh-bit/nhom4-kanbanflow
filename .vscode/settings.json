@@ -4,5 +4,10 @@
     },
     "terminal.integrated.env.windows": {
         "PUB_CACHE": "E:\\PubCache"
-    }
+    },
+    "deno.enable": true,
+    "deno.enablePaths": [
+        "supabase/functions"
+    ],
+    "deno.importMap": "supabase/functions/import_map.json"
 }

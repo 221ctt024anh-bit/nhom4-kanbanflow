@@ -210,6 +210,12 @@ class FriendRepository {
     required bool accept,
   }) async {
     _requireUserId();
+
+    // No manual friendship insertion here.
+    // The database trigger 'trg_friend_request_accept' handles it automatically
+    // when the status is updated to 'accepted'.
+
+    // 3. Cập nhật trạng thái lời mời
     await _client
         .from('friend_requests')
         .update({
@@ -218,6 +224,27 @@ class FriendRepository {
         })
         .eq('id', requestId)
         .eq('status', 'pending');
+  }
+
+  Future<void> removeFriend(String friendId) async {
+    final currentUserId = _requireUserId();
+
+    // Xóa quan hệ bạn bè cả 2 chiều
+    await _client
+        .from('friendships')
+        .delete()
+        .or(
+          'and(user_id.eq.$currentUserId,friend_id.eq.$friendId),and(user_id.eq.$friendId,friend_id.eq.$currentUserId)',
+        );
+
+    // Cập nhật trạng thái các lời mời kết bạn liên quan thành 'rejected' hoặc xóa đi để có thể kết bạn lại sau này
+    // Ở đây ta xóa để sạch database và cho phép gửi lại invitation mới
+    await _client
+        .from('friend_requests')
+        .delete()
+        .or(
+          'and(sender_id.eq.$currentUserId,recipient_id.eq.$friendId),and(sender_id.eq.$friendId,recipient_id.eq.$currentUserId)',
+        );
   }
 
   Future<void> updateMyPresence({required bool isOnline}) async {

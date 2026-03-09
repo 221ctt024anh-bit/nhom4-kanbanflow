@@ -1,12 +1,16 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 import '../../domain/entities/direct_message.dart';
+import 'notification_repository.dart';
 
 class ChatRepository {
   final SupabaseClient _client;
+  final NotificationRepository? _notificationRepository;
 
-  ChatRepository({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+  ChatRepository({
+    SupabaseClient? client,
+    NotificationRepository? notificationRepository,
+  }) : _client = client ?? Supabase.instance.client,
+       _notificationRepository = notificationRepository;
 
   String _requireUserId() {
     final userId = _client.auth.currentUser?.id;
@@ -31,16 +35,18 @@ class ChatRepository {
         .order('created_at', ascending: true)
         .map((rows) {
           final messages = rows
-              .map((row) => DirectMessage(
-                    id: row['id'] as String,
-                    conversationId: row['conversation_id'] as String,
-                    senderId: row['sender_id'] as String,
-                    recipientId: row['recipient_id'] as String,
-                    content: row['content'] as String,
-                    createdAt: row['created_at'] as String,
-                    isRead: (row['is_read'] as bool?) ?? false,
-                    readAt: row['read_at'] as String?,
-                  ))
+              .map(
+                (row) => DirectMessage(
+                  id: row['id'] as String,
+                  conversationId: row['conversation_id'] as String,
+                  senderId: row['sender_id'] as String,
+                  recipientId: row['recipient_id'] as String,
+                  content: row['content'] as String,
+                  createdAt: row['created_at'] as String,
+                  isRead: (row['is_read'] as bool?) ?? false,
+                  readAt: row['read_at'] as String?,
+                ),
+              )
               .toList();
           messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
           return messages;
@@ -61,6 +67,31 @@ class ChatRepository {
       'recipient_id': friendId,
       'content': cleaned,
     });
+
+    // Tạo thông báo cho người nhận
+    if (_notificationRepository != null) {
+      try {
+        // Lấy tên người gửi
+        final senderProfile = await _client
+            .from('profiles')
+            .select('display_name, email')
+            .eq('id', currentUserId)
+            .maybeSingle();
+
+        final senderName =
+            senderProfile?['display_name'] ??
+            (senderProfile?['email'] as String?)?.split('@').first ??
+            'Ai đó';
+
+        await _notificationRepository.createNotification(
+          userId: friendId,
+          title: 'Tin nhắn mới',
+          message: '$senderName: $cleaned',
+        );
+      } catch (_) {
+        // Không block việc gửi tin nhắn nếu tạo thông báo lỗi
+      }
+    }
   }
 
   Future<void> markConversationRead(String friendId) async {
@@ -68,10 +99,7 @@ class ChatRepository {
     final conversationId = buildConversationId(currentUserId, friendId);
     await _client
         .from('direct_messages')
-        .update({
-          'is_read': true,
-          'read_at': DateTime.now().toIso8601String(),
-        })
+        .update({'is_read': true, 'read_at': DateTime.now().toIso8601String()})
         .eq('conversation_id', conversationId)
         .eq('recipient_id', currentUserId)
         .eq('is_read', false);

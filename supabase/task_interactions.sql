@@ -74,6 +74,33 @@ begin
         )
       );
   end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'task_comments'
+      and policyname = 'task_comments_update_owner'
+  ) then
+    create policy task_comments_update_owner
+      on public.task_comments
+      for update
+      to authenticated
+      using (user_id = auth.uid())
+      with check (user_id = auth.uid());
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'task_comments'
+      and policyname = 'task_comments_delete_owner'
+  ) then
+    create policy task_comments_delete_owner
+      on public.task_comments
+      for delete
+      to authenticated
+      using (user_id = auth.uid());
+  end if;
 end $$;
 
 create table if not exists public.user_notifications (
@@ -285,6 +312,19 @@ begin
       using (sender_id = auth.uid() or recipient_id = auth.uid())
       with check (sender_id = auth.uid() or recipient_id = auth.uid());
   end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'friend_requests'
+      and policyname = 'friend_requests_delete_related'
+  ) then
+    create policy friend_requests_delete_related
+      on public.friend_requests
+      for delete
+      to authenticated
+      using (sender_id = auth.uid() or recipient_id = auth.uid());
+  end if;
 end $$;
 
 create table if not exists public.friendships (
@@ -311,6 +351,32 @@ begin
     create policy friendships_select_own
       on public.friendships
       for select
+      to authenticated
+      using (user_id = auth.uid());
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'friendships'
+      and policyname = 'friendships_insert_own'
+  ) then
+    create policy friendships_insert_own
+      on public.friendships
+      for insert
+      to authenticated
+      with check (user_id = auth.uid());
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'friendships'
+      and policyname = 'friendships_delete_own'
+  ) then
+    create policy friendships_delete_own
+      on public.friendships
+      for delete
       to authenticated
       using (user_id = auth.uid());
   end if;
@@ -531,6 +597,78 @@ create trigger trg_task_comments_notifications
 after insert on public.task_comments
 for each row
 execute function public.create_comment_notifications();
+
+create or replace function public.create_task_notifications()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_assignee_email text;
+  v_actor_name text;
+begin
+  -- Only proceed if assignee_id is NOT NULL
+  if (tg_op = 'INSERT' and new.assignee_id is not null) or
+     (tg_op = 'UPDATE' and new.assignee_id is not null and (old.assignee_id is null or old.assignee_id <> new.assignee_id)) then
+    
+    -- Get recipient email
+    select email into v_assignee_email from auth.users where id = new.assignee_id;
+    
+    -- Get actor name (creator or updater)
+    select coalesce(display_name, email) into v_actor_name 
+    from public.profiles p 
+    join auth.users au on au.id = p.id
+    where p.id = auth.uid();
+
+    if v_assignee_email is not null then
+      -- 1. In-app notification
+      insert into public.user_notifications (user_id, task_id, title, message)
+      values (
+        new.assignee_id,
+        new.id,
+        'Nhiệm vụ mới được giao',
+        'Bạn đã được giao nhiệm vụ "' || coalesce(new.title, 'Task') || '" bởi ' || coalesce(v_actor_name, 'một người dùng khác')
+      );
+
+      -- 2. Email job
+      insert into public.email_jobs (
+        event_type,
+        recipient_user_id,
+        recipient_email,
+        subject,
+        body_text,
+        payload
+      )
+      select
+        'task_assignment',
+        new.assignee_id,
+        v_assignee_email,
+        '[KanbanFlow] Nhiệm vụ mới được giao: ' || coalesce(new.title, 'Task'),
+        'Chào bạn, bạn vừa được giao nhiệm vụ "' || coalesce(new.title, 'Task') || '". Hãy vào ứng dụng để kiểm tra chi tiết.',
+        jsonb_build_object(
+          'task_id', new.id,
+          'task_title', coalesce(new.title, ''),
+          'actor_user_id', auth.uid()
+        )
+      where exists (
+        select 1 from public.user_settings us 
+        where us.user_id = new.assignee_id and coalesce(us.email_notifications, true) = true
+      ) or not exists (
+        select 1 from public.user_settings us where us.user_id = new.assignee_id
+      );
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_task_notifications on public.tasks;
+create trigger trg_task_notifications
+after insert or update of assignee_id on public.tasks
+for each row
+execute function public.create_task_notifications();
 
 create table if not exists public.task_attachments (
   id uuid primary key default gen_random_uuid(),
@@ -819,3 +957,254 @@ begin
       using (bucket_id = 'profile-avatars');
   end if;
 end $$;
+
+-- 10. Robust RLS Policies (Final Fix)
+
+-- Helper function to check board membership without recursion
+-- Using security definer to bypass RLS in the check
+create or replace function public.check_board_access(p_board_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.boards
+    where id = p_board_id and owner_id = auth.uid()
+    union all
+    select 1 from public.board_members
+    where board_id = p_board_id and user_id = auth.uid()
+  );
+$$;
+
+-- Enable RLS
+alter table public.boards enable row level security;
+alter table public.board_members enable row level security;
+alter table public.tasks enable row level security;
+
+-- Drop all potentially conflicting policies
+do $$
+begin
+  -- Tasks
+  drop policy if exists "tasks_select_policy" on public.tasks;
+  drop policy if exists "tasks_insert_policy" on public.tasks;
+  drop policy if exists "tasks_update_policy" on public.tasks;
+  drop policy if exists "tasks_delete_policy" on public.tasks;
+  drop policy if exists "Users can update their own tasks" on public.tasks;
+  drop policy if exists "Users can insert their own tasks" on public.tasks;
+  drop policy if exists "tasks_access_policy" on public.tasks;
+  
+  -- Boards
+  drop policy if exists "Enable read access for own boards" on public.boards;
+  drop policy if exists "Enable insert for authenticated users" on public.boards;
+  drop policy if exists "boards_access_policy" on public.boards;
+  
+  -- Board Members
+  drop policy if exists "Enable read access for board members" on public.board_members;
+  drop policy if exists "board_members_access_policy" on public.board_members;
+end $$;
+
+-- Policies for Boards
+create policy "boards_access_policy" on public.boards
+for all to authenticated
+using ( public.check_board_access(id) );
+
+-- Policies for Board Members
+create policy "board_members_access_policy" on public.board_members
+for all to authenticated
+using ( 
+  user_id = auth.uid() or -- Cho phép xem chính mình
+  public.check_board_access(board_id) -- Cho phép xem thành viên khác nếu có quyền vào bảng
+);
+
+-- Unified Policy for Tasks
+create policy "tasks_access_policy" on public.tasks
+for all to authenticated
+using ( public.check_board_access(board_id) )
+with check ( public.check_board_access(board_id) );
+
+-- 11. Email Notification Triggers (Consolidated)
+
+-- Function to handle Task Assignment Emails
+create or replace function public.handle_task_assignment_email()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_recipient_email text;
+  v_email_enabled boolean;
+begin
+  -- Only if assignee is set or changed
+  if (TG_OP = 'INSERT' and new.assignee_id is not null) or 
+     (TG_OP = 'UPDATE' and new.assignee_id is not null and (old.assignee_id is null or old.assignee_id <> new.assignee_id)) then
+    
+    -- Check if user wants emails
+    select us.email_notifications into v_email_enabled
+    from public.user_settings us
+    where us.user_id = new.assignee_id;
+
+    if coalesce(v_email_enabled, true) = false then
+      return new;
+    end if;
+
+    select au.email into v_recipient_email
+    from auth.users au
+    where au.id = new.assignee_id;
+
+    if v_recipient_email is not null and length(trim(v_recipient_email)) > 0 then
+      insert into public.email_jobs (
+        event_type,
+        recipient_user_id,
+        recipient_email,
+        subject,
+        body_text,
+        payload
+      )
+      values (
+        'task_assignment',
+        new.assignee_id,
+        v_recipient_email,
+        '[TaskMate] Bạn được giao một công việc mới: ' || coalesce(new.title, 'Task'),
+        'Xin chào, bạn vừa được giao task mới "' || coalesce(new.title, 'Task') || '". Đăng nhập vào ứng dụng để xem chi tiết.',
+        jsonb_build_object(
+          'task_id', new.id,
+          'task_title', coalesce(new.title, '')
+        )
+      );
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_task_assignment_email on public.tasks;
+create trigger trg_task_assignment_email
+after update or insert on public.tasks
+for each row
+execute function public.handle_task_assignment_email();
+
+-- Function to handle Friend Request Emails
+create or replace function public.handle_friend_request_email()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_recipient_email text;
+  v_sender_name text;
+  v_email_enabled boolean;
+begin
+  if (new.status = 'pending') then
+    -- Check if user wants emails
+    select us.email_notifications into v_email_enabled
+    from public.user_settings us
+    where us.user_id = new.recipient_id;
+
+    if coalesce(v_email_enabled, true) = false then
+      return new;
+    end if;
+
+    select au.email into v_recipient_email
+    from auth.users au
+    where au.id = new.recipient_id;
+
+    select coalesce(display_name, 'Một người dùng') into v_sender_name
+    from public.profiles
+    where id = new.sender_id;
+
+    if v_recipient_email is not null and length(trim(v_recipient_email)) > 0 then
+      insert into public.email_jobs (
+        event_type,
+        recipient_user_id,
+        recipient_email,
+        subject,
+        body_text,
+        payload
+      )
+      values (
+        'friend_request',
+        new.recipient_id,
+        v_recipient_email,
+        '[TaskMate] Bạn nhận được lời mời kết bạn từ ' || v_sender_name,
+        v_sender_name || ' muốn kết bạn với bạn trên TaskMate. Đăng nhập để đồng ý hoặc từ chối.',
+        jsonb_build_object(
+          'sender_id', new.sender_id,
+          'sender_name', v_sender_name
+        )
+      );
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_friend_request_email on public.friend_requests;
+create trigger trg_friend_request_email
+after insert on public.friend_requests
+for each row
+execute function public.handle_friend_request_email();
+
+-- Function to handle Direct Message Emails
+create or replace function public.handle_direct_message_email()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_recipient_email text;
+  v_sender_name text;
+  v_email_enabled boolean;
+begin
+  -- Check if user wants emails
+  select us.email_notifications into v_email_enabled
+  from public.user_settings us
+  where us.user_id = new.recipient_id;
+
+  if coalesce(v_email_enabled, true) = false then
+    return new;
+  end if;
+
+  select au.email into v_recipient_email
+  from auth.users au
+  where au.id = new.recipient_id;
+
+  select coalesce(display_name, 'Một người dùng') into v_sender_name
+  from public.profiles
+  where id = new.sender_id;
+
+  if v_recipient_email is not null and length(trim(v_recipient_email)) > 0 then
+    insert into public.email_jobs (
+      event_type,
+      recipient_user_id,
+      recipient_email,
+      subject,
+      body_text,
+      payload
+    )
+    values (
+      'direct_message',
+      new.recipient_id,
+      v_recipient_email,
+      '[TaskMate] Bạn có tin nhắn mới từ ' || v_sender_name,
+      'Bạn vừa nhận được một tin nhắn mới: "' || left(new.content, 50) || '...". Đăng nhập để trả lời.',
+      jsonb_build_object(
+        'sender_id', new.sender_id,
+        'sender_name', v_sender_name,
+        'conversation_id', new.conversation_id
+      )
+    );
+  end if;
+  
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_direct_message_email on public.direct_messages;
+create trigger trg_direct_message_email
+after insert on public.direct_messages
+for each row
+execute function public.handle_direct_message_email();

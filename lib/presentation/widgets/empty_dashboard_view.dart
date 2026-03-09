@@ -35,7 +35,6 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
   int _assignedTasks = 0;
   int _doneTasks = 0;
   int _friendCount = 0;
-  int _unreadNotifications = 0;
 
   bool _isMissingColumnError(Object error) {
     return error is PostgrestException && error.code == '42703';
@@ -96,7 +95,6 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
       int assignedTasksCount = 0;
       int doneTasksCount = 0;
       int friendCount = 0;
-      int unreadNotifications = 0;
 
       try {
         final ownedBoardsResponse = await _client
@@ -111,7 +109,11 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
             .from('board_members')
             .select('board_id')
             .eq('user_id', userId);
-        joinedBoards = (joinedBoardsResponse as List).length;
+        final totalJoined = (joinedBoardsResponse as List).length;
+        // Bảng tham gia = Tổng số bảng là thành viên - Số bảng mình sở hữu
+        joinedBoards = totalJoined > ownedBoards
+            ? totalJoined - ownedBoards
+            : 0;
       } catch (_) {}
 
       try {
@@ -127,20 +129,21 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
       } catch (_) {}
 
       try {
+        // Đếm bạn bè theo cách mới (tìm cả 2 chiều)
         final friendResponse = await _client
             .from('friendships')
-            .select('friend_id')
-            .eq('user_id', userId);
-        friendCount = (friendResponse as List).length;
-      } catch (_) {}
+            .select('user_id, friend_id')
+            .or('user_id.eq.$userId,friend_id.eq.$userId');
 
-      try {
-        final unreadNotificationsResponse = await _client
-            .from('user_notifications')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('is_read', false);
-        unreadNotifications = (unreadNotificationsResponse as List).length;
+        final allRelated = friendResponse as List;
+        final uniqueFriends = <String>{};
+        for (final item in allRelated) {
+          final m = item as Map<String, dynamic>;
+          if (m['user_id'] != userId) uniqueFriends.add(m['user_id'] as String);
+          if (m['friend_id'] != userId)
+            uniqueFriends.add(m['friend_id'] as String);
+        }
+        friendCount = uniqueFriends.length;
       } catch (_) {}
 
       if (!mounted) return;
@@ -157,7 +160,6 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
         _assignedTasks = assignedTasksCount;
         _doneTasks = doneTasksCount;
         _friendCount = friendCount;
-        _unreadNotifications = unreadNotifications;
       });
     } catch (_) {
       // Keep auth fallback values.
@@ -302,11 +304,6 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
           AppPreferences.tr('Số bạn bè', 'Total Friends'),
           _friendCount.toString(),
           Icons.people_outline_rounded,
-        ),
-        _statCard(
-          AppPreferences.tr('Thông báo mới', 'New Notifications'),
-          _unreadNotifications.toString(),
-          Icons.notifications_none,
         ),
       ],
     );
@@ -501,12 +498,6 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
             ),
           ),
           const SizedBox(height: 10),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.refresh),
-            title: Text(AppPreferences.tr('Làm mới dữ liệu', 'Refresh data')),
-            onTap: _loadProfileData,
-          ),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.settings_outlined),

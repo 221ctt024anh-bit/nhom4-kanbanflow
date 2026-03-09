@@ -106,7 +106,18 @@ class _BoardMemberSelectDialogState extends State<BoardMemberSelectDialog> {
 
                   return ListTile(
                     leading: UserAvatar(userId: member.id, radius: 18),
-                    title: Text(member.displayName ?? member.email),
+                    title: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            member.displayName ?? member.email,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildRoleChip(member.role),
+                      ],
+                    ),
                     trailing: isSelected
                         ? const Icon(
                             Icons.check_circle,
@@ -119,6 +130,33 @@ class _BoardMemberSelectDialogState extends State<BoardMemberSelectDialog> {
                   );
                 },
               ),
+      ),
+    );
+  }
+
+  Widget _buildRoleChip(String? role) {
+    final isAdmin = role == 'admin';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: isAdmin
+            ? Colors.orange.withOpacity(0.1)
+            : Colors.blueAccent.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isAdmin
+              ? Colors.orange.withOpacity(0.5)
+              : Colors.blueAccent.withOpacity(0.5),
+          width: 0.5,
+        ),
+      ),
+      child: Text(
+        isAdmin ? AppPreferences.tr('AD', 'AD') : AppPreferences.tr('MB', 'MB'),
+        style: TextStyle(
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+          color: isAdmin ? Colors.orange[800] : Colors.blueAccent,
+        ),
       ),
     );
   }

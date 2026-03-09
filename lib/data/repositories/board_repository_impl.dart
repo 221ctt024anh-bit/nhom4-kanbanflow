@@ -181,13 +181,21 @@ class BoardRepositoryImpl implements BoardRepository {
         .filter('id', 'in', userIds);
 
     final profiles = profileResponse as List;
+    final roleMap = {
+      for (var row in memberRows)
+        (row as Map<String, dynamic>)['user_id'] as String:
+            row['role'] as String?,
+    };
+
     return profiles.map((profile) {
       final map = profile as Map<String, dynamic>;
+      final id = map['id'] as String;
       return UserModel(
-        id: map['id'] as String,
+        id: id,
         email: (map['email'] as String?) ?? '',
         displayName: map['display_name'] as String?,
         avatarUrl: map['avatar_url'] as String?,
+        role: roleMap[id],
       );
     }).toList();
   }
@@ -216,7 +224,10 @@ class BoardRepositoryImpl implements BoardRepository {
             });
           } catch (_) {}
         } else if (op.operation == 'update') {
-          await supabaseClient.from('boards').update(payload).eq('id', payload['id']);
+          await supabaseClient
+              .from('boards')
+              .update(payload)
+              .eq('id', payload['id']);
         } else if (op.operation == 'delete') {
           await supabaseClient.from('boards').delete().eq('id', payload['id']);
         }

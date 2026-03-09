@@ -63,7 +63,7 @@ class LocalDatabase {
 
     return openDatabase(
       path,
-      version: 3,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -79,9 +79,26 @@ class LocalDatabase {
     if (oldVersion < 3) {
       try {
         await db.execute('ALTER TABLE tasks ADD COLUMN due_at TEXT');
-      } catch (_) {
-        // Column may already exist.
-      }
+      } catch (_) {}
+    }
+    if (oldVersion < 4) {
+      try {
+        await db.execute('ALTER TABLE tasks ADD COLUMN checklist TEXT');
+      } catch (_) {}
+    }
+    if (oldVersion < 5) {
+      try {
+        await db.execute(
+          'ALTER TABLE tasks ADD COLUMN has_attachments INTEGER DEFAULT 0',
+        );
+      } catch (_) {}
+    }
+    if (oldVersion < 6) {
+      try {
+        await db.execute(
+          'ALTER TABLE tasks ADD COLUMN task_type TEXT DEFAULT "text"',
+        );
+      } catch (_) {}
     }
   }
 
@@ -105,6 +122,9 @@ class LocalDatabase {
         assignee_id TEXT,
         creator_id TEXT,
         due_at TEXT,
+        checklist TEXT,
+        has_attachments INTEGER DEFAULT 0,
+        task_type TEXT DEFAULT "text",
         created_at TEXT NOT NULL,
         FOREIGN KEY (board_id) REFERENCES boards (id) ON DELETE CASCADE
       )
