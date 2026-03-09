@@ -63,7 +63,7 @@ class LocalDatabase {
 
     return openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -100,6 +100,11 @@ class LocalDatabase {
         );
       } catch (_) {}
     }
+    if (oldVersion < 7) {
+      try {
+        await db.execute('ALTER TABLE tasks ADD COLUMN assignee_ids TEXT');
+      } catch (_) {}
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -119,6 +124,7 @@ class LocalDatabase {
         title TEXT NOT NULL,
         description TEXT NOT NULL,
         status TEXT NOT NULL,
+        assignee_ids TEXT,
         assignee_id TEXT,
         creator_id TEXT,
         due_at TEXT,

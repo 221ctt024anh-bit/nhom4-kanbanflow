@@ -51,15 +51,19 @@ class TaskInteractionRepository {
     try {
       final taskResponse = await _client
           .from('tasks')
-          .select('creator_id, assignee_id, title')
+          .select('creator_id, title, task_assignees(user_id)')
           .eq('id', taskId)
           .single();
 
       final creatorId = taskResponse['creator_id'] as String;
-      final assigneeId = taskResponse['assignee_id'] as String?;
       final taskTitle = taskResponse['title'] as String;
+      final List<dynamic> assigneesRaw =
+          taskResponse['task_assignees'] as List<dynamic>? ?? [];
+      final List<String> assigneeIds = assigneesRaw
+          .map((a) => a['user_id'] as String)
+          .toList();
 
-      final notifyUserIds = {creatorId, if (assigneeId != null) assigneeId};
+      final notifyUserIds = {creatorId, ...assigneeIds};
       notifyUserIds.remove(userId); // Don't notify the person who commented
 
       for (final recipientId in notifyUserIds) {

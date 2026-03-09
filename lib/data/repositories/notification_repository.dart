@@ -36,6 +36,7 @@ class NotificationRepository {
       return AppNotification(
         id: map['id'] as String,
         userId: map['user_id'] as String,
+        senderId: map['sender_id'] as String?,
         taskId: map['task_id'] as String?,
         commentId: map['comment_id'] as String?,
         title: (map['title'] as String?) ?? '',

@@ -102,15 +102,32 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
       } catch (_) {}
 
       try {
-        final assignedTasksResponse = await _client
+        // Query tasks assigned via join table using inner join filter
+        final assignedResponse = await _client
             .from('tasks')
-            .select('id,status')
-            .or('assignee_id.eq.$userId,creator_id.eq.$userId');
-        final assigned = assignedTasksResponse as List;
-        assignedTasks = assigned.length;
-        doneTasks = assigned
-            .where((item) => (item as Map<String, dynamic>)['status'] == 'done')
-            .length;
+            .select('id, status, task_assignees!inner(user_id)')
+            .eq('task_assignees.user_id', userId);
+        final assigned = (assignedResponse as List).map(
+          (e) => e as Map<String, dynamic>,
+        );
+
+        // Query tasks created by user
+        final createdResponse = await _client
+            .from('tasks')
+            .select('id, status')
+            .eq('creator_id', userId);
+        final created = (createdResponse as List).map(
+          (e) => e as Map<String, dynamic>,
+        );
+
+        // Combine unique tasks
+        final allTasks = <String, Map<String, dynamic>>{};
+        for (final t in assigned) allTasks[t['id'] as String] = t;
+        for (final t in created) allTasks[t['id'] as String] = t;
+
+        final tasksList = allTasks.values.toList();
+        assignedTasks = tasksList.length;
+        doneTasks = tasksList.where((t) => t['status'] == 'done').length;
       } catch (_) {}
 
       try {

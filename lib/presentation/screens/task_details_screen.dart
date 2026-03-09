@@ -606,17 +606,17 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionTitle(
-          AppPreferences.tr('NGƯỜI THỰC HIỆN', 'ASSIGNEE'),
+          AppPreferences.tr('NGƯỜI THỰC HIỆN', 'ASSIGNEES'),
           trailing: TextButton.icon(
             onPressed: () async {
-              final selectedUserId = await showDialog<String>(
+              final selectedUserIds = await showDialog<List<String>>(
                 context: context,
                 builder: (context) => BoardMemberSelectDialog(
                   boardId: _currentTask.boardId,
-                  currentAssigneeId: _currentTask.assigneeId,
+                  currentAssigneeIds: _currentTask.assigneeIds,
                 ),
               );
-              if (selectedUserId == null) return;
+              if (selectedUserIds == null) return;
 
               final updatedTask = Task(
                 id: _currentTask.id,
@@ -626,7 +626,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                 status: _currentTask.status,
                 creatorId: _currentTask.creatorId,
                 createdAt: _currentTask.createdAt,
-                assigneeId: selectedUserId.isEmpty ? null : selectedUserId,
+                assigneeIds: selectedUserIds,
                 dueAt: _currentTask.dueAt,
                 checklist: _currentTask.checklist,
                 hasAttachments: _currentTask.hasAttachments,
@@ -656,20 +656,21 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
               ),
             ],
           ),
-          child:
-              _currentTask.assigneeId != null &&
-                  _currentTask.assigneeId!.isNotEmpty
-              ? Row(
-                  children: [
-                    UserAvatar(
-                      userId: _currentTask.assigneeId!,
-                      radius: 24,
-                      showName: true,
-                    ),
-                    const SizedBox(width: 12),
-                    if (!_loadingMembers)
-                      _buildAssigneeRoleChip(_currentTask.assigneeId!),
-                  ],
+          child: _currentTask.assigneeIds.isNotEmpty
+              ? Column(
+                  children: _currentTask.assigneeIds.map((uid) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        children: [
+                          UserAvatar(userId: uid, radius: 20, showName: true),
+                          const SizedBox(width: 12),
+                          const Spacer(),
+                          if (!_loadingMembers) _buildAssigneeRoleChip(uid),
+                        ],
+                      ),
+                    );
+                  }).toList(),
                 )
               : Text(
                   AppPreferences.tr('Chưa giao cho ai', 'Unassigned'),
@@ -940,7 +941,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
       status: _currentTask.status,
       creatorId: _currentTask.creatorId,
       createdAt: _currentTask.createdAt,
-      assigneeId: _currentTask.assigneeId,
+      assigneeIds: _currentTask.assigneeIds,
       dueAt: _currentTask.dueAt,
       checklist: newList,
     );

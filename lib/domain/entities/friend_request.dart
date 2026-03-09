@@ -7,6 +7,7 @@ class FriendRequest {
   final String? respondedAt;
   final String senderEmail;
   final String? senderDisplayName;
+  final String? senderAvatarUrl;
 
   const FriendRequest({
     required this.id,
@@ -17,5 +18,6 @@ class FriendRequest {
     required this.respondedAt,
     required this.senderEmail,
     required this.senderDisplayName,
+    this.senderAvatarUrl,
   });
 }

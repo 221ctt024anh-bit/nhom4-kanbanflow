@@ -7,12 +7,12 @@ import 'user_avatar.dart';
 
 class BoardMemberSelectDialog extends StatefulWidget {
   final String boardId;
-  final String? currentAssigneeId;
+  final List<String> currentAssigneeIds;
 
   const BoardMemberSelectDialog({
     super.key,
     required this.boardId,
-    this.currentAssigneeId,
+    this.currentAssigneeIds = const [],
   });
 
   @override
@@ -22,12 +22,14 @@ class BoardMemberSelectDialog extends StatefulWidget {
 
 class _BoardMemberSelectDialogState extends State<BoardMemberSelectDialog> {
   List<UserModel> _members = [];
+  late List<String> _selectedIds;
   bool _isLoading = true;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _selectedIds = List.from(widget.currentAssigneeIds);
     _loadMembers();
   }
 
@@ -52,12 +54,12 @@ class _BoardMemberSelectDialogState extends State<BoardMemberSelectDialog> {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(
-        AppPreferences.tr('Giao việc cho thành viên', 'Assign to Member'),
-        style: TextStyle(fontWeight: FontWeight.bold),
+        AppPreferences.tr('Giao việc cho thành viên', 'Assign members'),
+        style: const TextStyle(fontWeight: FontWeight.bold),
       ),
       content: SizedBox(
         width: 300,
-        height: 350,
+        height: 400,
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
@@ -77,60 +79,50 @@ class _BoardMemberSelectDialogState extends State<BoardMemberSelectDialog> {
                 ),
               )
             : ListView.builder(
-                itemCount: _members.length + 1, // +1 for "Bỏ giao việc"
+                itemCount: _members.length,
                 itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.grey[200],
-                        child: const Icon(
-                          Icons.person_off,
-                          color: Colors.black54,
-                        ),
-                      ),
-                      title: Text(
-                        AppPreferences.tr('Bỏ giao việc', 'Unassign'),
-                        style: const TextStyle(fontStyle: FontStyle.italic),
-                      ),
-                      onTap: () {
-                        Navigator.pop(
-                          context,
-                          "",
-                        ); // Trả về chuỗi rỗng để hiểu là huỷ
-                      },
-                    );
-                  }
+                  final member = _members[index];
+                  final isSelected = _selectedIds.contains(member.id);
 
-                  final member = _members[index - 1];
-                  final isSelected = member.id == widget.currentAssigneeId;
-
-                  return ListTile(
-                    leading: UserAvatar(userId: member.id, radius: 18),
+                  return CheckboxListTile(
+                    secondary: UserAvatar(userId: member.id, radius: 18),
+                    value: isSelected,
                     title: Row(
                       children: [
                         Flexible(
                           child: Text(
                             member.displayName ?? member.email,
                             overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 14),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 4),
                         _buildRoleChip(member.role),
                       ],
                     ),
-                    trailing: isSelected
-                        ? const Icon(
-                            Icons.check_circle,
-                            color: Colors.blueAccent,
-                          )
-                        : null,
-                    onTap: () {
-                      Navigator.pop(context, member.id);
+                    onChanged: (val) {
+                      setState(() {
+                        if (val == true) {
+                          _selectedIds.add(member.id);
+                        } else {
+                          _selectedIds.remove(member.id);
+                        }
+                      });
                     },
                   );
                 },
               ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(AppPreferences.tr('Hủy', 'Cancel')),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, _selectedIds),
+          child: Text(AppPreferences.tr('Xác nhận', 'Confirm')),
+        ),
+      ],
     );
   }
 

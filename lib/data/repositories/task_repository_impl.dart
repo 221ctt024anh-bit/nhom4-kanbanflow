@@ -28,7 +28,9 @@ class TaskRepositoryImpl implements TaskRepository {
     try {
       await _syncPendingTaskOperations();
 
-      var request = supabaseClient.from('tasks').select();
+      var request = supabaseClient
+          .from('tasks')
+          .select('*, task_assignees(user_id)');
 
       if (boardId != null) {
         request = request.eq('board_id', boardId);
@@ -93,7 +95,7 @@ class TaskRepositoryImpl implements TaskRepository {
       title: task.title,
       description: task.description,
       status: task.status,
-      assigneeId: task.assigneeId,
+      assigneeIds: task.assigneeIds,
       creatorId: task.creatorId,
       dueAt: task.dueAt,
       createdAt: task.createdAt,
@@ -107,6 +109,17 @@ class TaskRepositoryImpl implements TaskRepository {
       await supabaseClient
           .from('tasks')
           .upsert(taskModel.toSupabaseMap(), onConflict: 'id');
+
+      // Sync assignees
+      if (taskModel.assigneeIds.isNotEmpty) {
+        await supabaseClient
+            .from('task_assignees')
+            .insert(
+              taskModel.assigneeIds
+                  .map((uid) => {'task_id': task.id, 'user_id': uid})
+                  .toList(),
+            );
+      }
     } catch (_) {
       await localDatabase.enqueueOperation(
         entity: 'task',
@@ -124,7 +137,7 @@ class TaskRepositoryImpl implements TaskRepository {
       title: task.title,
       description: task.description,
       status: task.status,
-      assigneeId: task.assigneeId,
+      assigneeIds: task.assigneeIds,
       creatorId: task.creatorId,
       dueAt: task.dueAt,
       createdAt: task.createdAt,
@@ -135,34 +148,48 @@ class TaskRepositoryImpl implements TaskRepository {
 
     await localDatabase.upsertTask(taskModel);
     try {
-      // Fetch old task to check for changes
-      final oldTaskResponse = await supabaseClient
-          .from('tasks')
-          .select('assignee_id, title')
-          .eq('id', task.id)
-          .maybeSingle();
+      // 1. Fetch old assignees
+      final oldAssigneesResponse = await supabaseClient
+          .from('task_assignees')
+          .select('user_id')
+          .eq('task_id', task.id);
+      final oldAssigneeIds = (oldAssigneesResponse as List)
+          .map((e) => e['user_id'] as String)
+          .toList();
 
+      // 2. Update task basic info
       await supabaseClient
           .from('tasks')
           .update(taskModel.toSupabaseMap())
           .eq('id', task.id);
 
-      // Notification logic
-      if (oldTaskResponse != null) {
-        final oldAssigneeId = oldTaskResponse['assignee_id'] as String?;
-        final newAssigneeId = task.assigneeId;
+      // 3. Sync assignees join table
+      final newAssigneeIds = task.assigneeIds;
 
-        if (newAssigneeId != null && newAssigneeId != oldAssigneeId) {
-          final currentUserId = supabaseClient.auth.currentUser?.id;
-          if (newAssigneeId != currentUserId) {
-            await notificationRepository.createNotification(
-              userId: newAssigneeId,
-              taskId: task.id,
-              title: 'Công việc mới được giao',
-              message: 'Bạn đã được giao công việc: ${task.title}',
+      // Unassign those no longer in the list
+      final toRemove = oldAssigneeIds
+          .where((id) => !newAssigneeIds.contains(id))
+          .toList();
+      if (toRemove.isNotEmpty) {
+        await supabaseClient
+            .from('task_assignees')
+            .delete()
+            .eq('task_id', task.id)
+            .filter('user_id', 'in', toRemove);
+      }
+
+      // Assign those newly added
+      final toAdd = newAssigneeIds
+          .where((id) => !oldAssigneeIds.contains(id))
+          .toList();
+      if (toAdd.isNotEmpty) {
+        await supabaseClient
+            .from('task_assignees')
+            .insert(
+              toAdd.map((uid) => {'task_id': task.id, 'user_id': uid}).toList(),
             );
-          }
-        }
+
+        // Notifications are handled by DB trigger on task_assignees insert
       }
     } catch (_) {
       await localDatabase.enqueueOperation(

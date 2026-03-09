@@ -8,7 +8,7 @@ class TaskModel extends Task {
     required super.title,
     required super.description,
     required super.status,
-    super.assigneeId,
+    super.assigneeIds = const [],
     super.creatorId,
     super.dueAt,
     required super.createdAt,
@@ -30,13 +30,30 @@ class TaskModel extends Task {
       } catch (_) {}
     }
 
+    // Parse assigneeIds from Supabase nested query or SQLite JSON
+    List<String> assigneeIds = [];
+    final assigneesRaw = map['task_assignees'];
+    if (assigneesRaw is List) {
+      assigneeIds = assigneesRaw
+          .map((e) => (e as Map<String, dynamic>)['user_id'] as String)
+          .toList();
+    } else if (map['assignee_ids'] is String) {
+      try {
+        assigneeIds = (jsonDecode(map['assignee_ids'] as String) as List)
+            .cast<String>();
+      } catch (_) {}
+    } else if (map['assignee_id'] != null) {
+      // Fallback for migration or old schema
+      assigneeIds = [map['assignee_id'] as String];
+    }
+
     return TaskModel(
       id: map['id'] as String,
       boardId: map['board_id'] as String,
       title: map['title'] as String,
       description: map['description'] as String,
       status: map['status'] as String,
-      assigneeId: map['assignee_id'] as String?,
+      assigneeIds: assigneeIds,
       creatorId: map['creator_id'] as String?,
       dueAt: map['due_at'] != null
           ? DateTime.tryParse(map['due_at'] as String)?.toLocal()
@@ -58,7 +75,8 @@ class TaskModel extends Task {
       'title': title,
       'description': description,
       'status': status,
-      if (assigneeId != null) 'assignee_id': assigneeId,
+      'assignee_ids': jsonEncode(assigneeIds),
+      'assignee_id': assigneeIds.isNotEmpty ? assigneeIds.first : null,
       if (creatorId != null) 'creator_id': creatorId,
       if (dueAt != null) 'due_at': dueAt!.toUtc().toIso8601String(),
       'created_at': createdAt,
@@ -76,7 +94,6 @@ class TaskModel extends Task {
       'title': title,
       'description': description,
       'status': status,
-      'assignee_id': assigneeId,
       'creator_id': creatorId,
       'due_at': dueAt?.toUtc().toIso8601String(),
       'created_at': createdAt,

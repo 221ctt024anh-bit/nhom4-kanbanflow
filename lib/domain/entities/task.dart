@@ -34,7 +34,7 @@ class Task {
   final String title;
   final String description;
   final String status; // Trạng thái: 'todo', 'doing', 'done'
-  final String? assigneeId;
+  final List<String> assigneeIds;
   final String? creatorId;
   final DateTime? dueAt;
   final String createdAt;
@@ -48,7 +48,7 @@ class Task {
     required this.title,
     required this.description,
     required this.status,
-    this.assigneeId,
+    this.assigneeIds = const [],
     this.creatorId,
     this.dueAt,
     required this.createdAt,

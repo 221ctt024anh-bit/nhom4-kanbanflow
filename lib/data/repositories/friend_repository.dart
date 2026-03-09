@@ -179,7 +179,7 @@ class FriendRepository {
 
     final profilesResponse = await _client
         .from('profiles')
-        .select('id, email, display_name')
+        .select('id, email, display_name, avatar_url')
         .filter('id', 'in', senderIds);
     final profilesList = profilesResponse as List;
     final profileMap = <String, Map<String, dynamic>>{};
@@ -201,6 +201,7 @@ class FriendRepository {
         respondedAt: map['responded_at'] as String?,
         senderEmail: (senderProfile?['email'] as String?) ?? '',
         senderDisplayName: senderProfile?['display_name'] as String?,
+        senderAvatarUrl: senderProfile?['avatar_url'] as String?,
       );
     }).toList();
   }

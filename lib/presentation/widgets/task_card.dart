@@ -183,7 +183,7 @@ class TaskCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                  if (task.assigneeId != null && task.assigneeId!.isNotEmpty)
+                  if (task.assigneeIds.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Row(
@@ -217,12 +217,30 @@ class TaskCard extends StatelessWidget {
                               ),
                             ),
                           const Spacer(),
-                          UserAvatar(userId: task.assigneeId!, radius: 12),
+                          SizedBox(
+                            height: 24,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (
+                                  int i = 0;
+                                  i < task.assigneeIds.length;
+                                  i++
+                                )
+                                  Align(
+                                    widthFactor: 0.6,
+                                    child: UserAvatar(
+                                      userId: task.assigneeIds[i],
+                                      radius: 12,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                  if ((task.assigneeId == null || task.assigneeId!.isEmpty) &&
-                      task.dueAt != null)
+                  if (task.assigneeIds.isEmpty && task.dueAt != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Container(

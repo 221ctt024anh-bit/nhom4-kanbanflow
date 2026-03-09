@@ -22,11 +22,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:mime/mime.dart';
 import '../widgets/task_card.dart';
 import '../widgets/board_member_dialog.dart';
+import '../widgets/board_member_select_dialog.dart';
+import '../widgets/user_avatar.dart';
 import '../widgets/expandable_fab.dart';
 import 'workspace_menu_screen.dart';
 import '../../app_preferences.dart';
 import '../../injection_container.dart';
 import '../../data/repositories/task_interaction_repository.dart';
+import '../widgets/notification_dialog.dart';
 
 class BoardScreen extends StatefulWidget {
   const BoardScreen({super.key});
@@ -133,86 +136,14 @@ class _BoardScreenState extends State<BoardScreen> {
     }
   }
 
-  Future<void> _markAllNotificationsRead() async {
-    await _notificationRepository.markAllAsRead();
-    await _refreshNotifications();
-  }
-
-  Future<void> _markNotificationRead(String id) async {
-    await _notificationRepository.markAsRead(id);
-    await _refreshNotifications();
-  }
-
   void _showNotificationsDialog() {
     showDialog(
       context: context,
       builder: (_) {
-        return AlertDialog(
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(AppPreferences.tr('Thông báo', 'Notifications')),
-              ),
-              TextButton(
-                onPressed: _notifications.isEmpty
-                    ? null
-                    : _markAllNotificationsRead,
-                child: Text(
-                  AppPreferences.tr('Đánh dấu đã đọc', 'Mark all as read'),
-                ),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: 500,
-            child: _loadingNotifications
-                ? const Center(child: CircularProgressIndicator())
-                : _notifications.isEmpty
-                ? Text(
-                    AppPreferences.tr(
-                      'Chưa có thông báo nào',
-                      'No notifications yet',
-                    ),
-                  )
-                : ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: _notifications.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final item = _notifications[index];
-                      return ListTile(
-                        dense: true,
-                        title: Text(
-                          item.title,
-                          style: TextStyle(
-                            fontWeight: item.isRead
-                                ? FontWeight.w500
-                                : FontWeight.w700,
-                          ),
-                        ),
-                        subtitle: Text(item.message),
-                        trailing: item.isRead
-                            ? const Icon(
-                                Icons.done_all,
-                                size: 18,
-                                color: Colors.green,
-                              )
-                            : TextButton(
-                                onPressed: () => _markNotificationRead(item.id),
-                                child: Text(
-                                  AppPreferences.tr('Đã đọc', 'Read'),
-                                ),
-                              ),
-                      );
-                    },
-                  ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(AppPreferences.tr('Đóng', 'Close')),
-            ),
-          ],
+        return NotificationDialog(
+          notifications: _notifications,
+          repository: _notificationRepository,
+          onRefresh: _refreshNotifications,
         );
       },
     );
@@ -232,7 +163,7 @@ class _BoardScreenState extends State<BoardScreen> {
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) return [];
       return tasks
-          .where((t) => t.assigneeId == userId || t.creatorId == userId)
+          .where((t) => t.assigneeIds.contains(userId) || t.creatorId == userId)
           .toList();
     }
     if (_quickFilter == 'overdue') {
@@ -261,8 +192,8 @@ class _BoardScreenState extends State<BoardScreen> {
     for (final task in tasks) {
       if (_isOverdueTask(task) && !_notifiedOverdueIds.contains(task.id)) {
         // Only notify if user is involved
-        if (task.assigneeId == userId ||
-            (task.assigneeId == null && task.creatorId == userId)) {
+        if (task.assigneeIds.contains(userId) ||
+            (task.assigneeIds.isEmpty && task.creatorId == userId)) {
           _notifiedOverdueIds.add(task.id);
 
           _notificationRepository
@@ -963,7 +894,7 @@ class _BoardScreenState extends State<BoardScreen> {
           title: droppedTask.title,
           description: droppedTask.description,
           status: status == 'overdue' ? droppedTask.status : status,
-          assigneeId: droppedTask.assigneeId,
+          assigneeIds: droppedTask.assigneeIds,
           creatorId: droppedTask.creatorId,
           dueAt: droppedTask.dueAt,
           createdAt: droppedTask.createdAt,
@@ -1070,7 +1001,7 @@ class _BoardScreenState extends State<BoardScreen> {
           title: droppedTask.title,
           description: droppedTask.description,
           status: status == 'overdue' ? droppedTask.status : status,
-          assigneeId: droppedTask.assigneeId,
+          assigneeIds: droppedTask.assigneeIds,
           creatorId: droppedTask.creatorId,
           dueAt: droppedTask.dueAt,
           createdAt: droppedTask.createdAt,
@@ -1169,7 +1100,7 @@ class _BoardScreenState extends State<BoardScreen> {
           title: droppedTask.title,
           description: droppedTask.description,
           status: status == 'overdue' ? droppedTask.status : status,
-          assigneeId: droppedTask.assigneeId,
+          assigneeIds: droppedTask.assigneeIds,
           creatorId: droppedTask.creatorId,
           dueAt: droppedTask.dueAt,
           createdAt: droppedTask.createdAt,
@@ -1330,7 +1261,7 @@ class _BoardScreenState extends State<BoardScreen> {
                         ? authState.user.id
                         : '';
                     final board = Board(
-                      id: const Uuid().v4(),
+                      id: Uuid().v4(),
                       title: titleController.text.trim(),
                       ownerId: userId,
                       createdAt: DateTime.now().toIso8601String(),
@@ -1446,6 +1377,7 @@ class _BoardScreenState extends State<BoardScreen> {
     final titleController = TextEditingController();
     final descController = TextEditingController();
     DateTime? selectedDueAt;
+    List<String> selectedAssigneeIds = [];
     Uint8List? currentAttachmentBytes = initialAttachmentBytes;
     String? currentAttachmentName = initialAttachmentName;
     String currentTaskType = taskType;
@@ -1965,6 +1897,121 @@ class _BoardScreenState extends State<BoardScreen> {
                               ),
                             ),
                           ),
+                          const SizedBox(height: 12),
+
+                          // Multi-Assignee Selection in Add Task Dialog
+                          InkWell(
+                            onTap: _isUploading
+                                ? null
+                                : () async {
+                                    final result =
+                                        await showDialog<List<String>>(
+                                          context: context,
+                                          builder: (context) =>
+                                              BoardMemberSelectDialog(
+                                                boardId: selectedBoardId!,
+                                                currentAssigneeIds:
+                                                    selectedAssigneeIds,
+                                              ),
+                                        );
+                                    if (result != null) {
+                                      setDialogState(() {
+                                        selectedAssigneeIds = result;
+                                      });
+                                    }
+                                  },
+                            borderRadius: BorderRadius.circular(20),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 16,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: selectedAssigneeIds.isEmpty
+                                      ? Colors.transparent
+                                      : themeColor.withOpacity(0.35),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.people_outline_rounded,
+                                    size: 20,
+                                    color: selectedAssigneeIds.isEmpty
+                                        ? const Color(0xFF94A3B8)
+                                        : themeColor,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      selectedAssigneeIds.isEmpty
+                                          ? AppPreferences.tr(
+                                              'Giao cho thành viên',
+                                              'Assign to members',
+                                            )
+                                          : AppPreferences.tr(
+                                              'Đã chọn ${selectedAssigneeIds.length} người',
+                                              'Selected ${selectedAssigneeIds.length} members',
+                                            ),
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        color: selectedAssigneeIds.isEmpty
+                                            ? const Color(0xFF94A3B8)
+                                            : const Color(0xFF1E293B),
+                                        fontWeight: selectedAssigneeIds.isEmpty
+                                            ? FontWeight.w500
+                                            : FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  if (selectedAssigneeIds.isNotEmpty)
+                                    SizedBox(
+                                      height: 24,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          for (
+                                            int i = 0;
+                                            i <
+                                                (selectedAssigneeIds.length > 3
+                                                    ? 3
+                                                    : selectedAssigneeIds
+                                                          .length);
+                                            i++
+                                          )
+                                            Align(
+                                              widthFactor: 0.6,
+                                              child: UserAvatar(
+                                                userId: selectedAssigneeIds[i],
+                                                radius: 12,
+                                              ),
+                                            ),
+                                          if (selectedAssigneeIds.length > 3)
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                left: 4,
+                                              ),
+                                              child: Text(
+                                                '+${selectedAssigneeIds.length - 3}',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: themeColor,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
 
                           const SizedBox(height: 32),
 
@@ -2049,7 +2096,7 @@ class _BoardScreenState extends State<BoardScreen> {
 
                                           try {
                                             final task = Task(
-                                              id: const Uuid().v4(),
+                                              id: Uuid().v4(),
                                               boardId: selectedBoardId!,
                                               title: titleController.text
                                                   .trim(),
@@ -2060,6 +2107,7 @@ class _BoardScreenState extends State<BoardScreen> {
                                               createdAt: DateTime.now()
                                                   .toIso8601String(),
                                               dueAt: selectedDueAt,
+                                              assigneeIds: selectedAssigneeIds,
                                               checklist: initialChecklist ?? [],
                                               hasAttachments:
                                                   currentAttachmentBytes !=

@@ -119,9 +119,10 @@ class _EmptyDashboardViewState extends State<EmptyDashboardView> {
       try {
         final assignedTasksResponse = await _client
             .from('tasks')
-            .select('id,status')
-            .eq('assignee_id', userId);
-        final assignedTasks = assignedTasksResponse as List;
+            .select('id, status, task_assignees!inner(user_id)')
+            .eq('task_assignees.user_id', userId);
+
+        final assignedTasks = (assignedTasksResponse as List);
         assignedTasksCount = assignedTasks.length;
         doneTasksCount = assignedTasks
             .where((item) => (item as Map<String, dynamic>)['status'] == 'done')
