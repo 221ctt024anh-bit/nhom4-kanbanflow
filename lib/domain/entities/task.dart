@@ -38,6 +38,7 @@ class Task {
   final String? creatorId;
   final DateTime? dueAt;
   final String createdAt;
+  final String updatedAt;
   final List<ChecklistItem> checklist;
   final bool hasAttachments;
   final String? taskType;
@@ -52,8 +53,41 @@ class Task {
     this.creatorId,
     this.dueAt,
     required this.createdAt,
+    String? updatedAt,
     this.checklist = const [],
     this.hasAttachments = false,
     this.taskType = 'text',
-  });
+  }) : updatedAt = updatedAt ?? createdAt;
+
+  Task copyWith({
+    String? id,
+    String? boardId,
+    String? title,
+    String? description,
+    String? status,
+    List<String>? assigneeIds,
+    String? creatorId,
+    DateTime? dueAt,
+    String? createdAt,
+    String? updatedAt,
+    List<ChecklistItem>? checklist,
+    bool? hasAttachments,
+    String? taskType,
+  }) {
+    return Task(
+      id: id ?? this.id,
+      boardId: boardId ?? this.boardId,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      status: status ?? this.status,
+      assigneeIds: assigneeIds ?? this.assigneeIds,
+      creatorId: creatorId ?? this.creatorId,
+      dueAt: dueAt ?? this.dueAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      checklist: checklist ?? this.checklist,
+      hasAttachments: hasAttachments ?? this.hasAttachments,
+      taskType: taskType ?? this.taskType,
+    );
+  }
 }

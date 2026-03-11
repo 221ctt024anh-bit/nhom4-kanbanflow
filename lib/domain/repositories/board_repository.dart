@@ -10,4 +10,6 @@ abstract class BoardRepository {
   Future<void> addMember(String boardId, String email);
   Future<List<UserModel>> getBoardMembers(String boardId);
   Future<void> removeMember(String boardId, String userId);
+  Future<void> updateMemberRole(String boardId, String userId, String role);
+  String? getRole(String boardId);
 }

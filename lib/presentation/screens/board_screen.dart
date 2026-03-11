@@ -512,6 +512,11 @@ class _BoardScreenState extends State<BoardScreen> {
                           break;
                         }
                       }
+                      final currentRole = state.getRole(selectedBoardId!);
+                      // Note: 'owner' is usually the creator, but our RBAC logic treats owners/admins similarly for management
+                      if (currentRole != 'owner' && currentRole != 'admin') {
+                        return const SizedBox.shrink();
+                      }
                       return IconButton(
                         icon: const Icon(Icons.group_add_outlined),
                         tooltip: AppPreferences.tr('Thành viên', 'Members'),
@@ -553,26 +558,39 @@ class _BoardScreenState extends State<BoardScreen> {
               : _buildBoardContent(context),
           floatingActionButton: selectedBoardId == null
               ? null
-              : ExpandableFab(
-                  distance: 60.0,
-                  onClose: () {},
-                  children: [
-                    ActionButton(
-                      onPressed: _pickAudio,
-                      icon: const Icon(Icons.mic_none),
-                      label: AppPreferences.tr('Âm thanh', 'Audio'),
-                    ),
-                    ActionButton(
-                      onPressed: _pickImage,
-                      icon: const Icon(Icons.image_outlined),
-                      label: AppPreferences.tr('Ảnh & Video', 'Image & Video'),
-                    ),
-                    ActionButton(
-                      onPressed: () => _showAddTaskDialog(context),
-                      icon: const Icon(Icons.text_fields),
-                      label: AppPreferences.tr('Văn bản', 'Text'),
-                    ),
-                  ],
+              : BlocBuilder<BoardBloc, BoardState>(
+                  builder: (context, state) {
+                    if (state is BoardLoaded) {
+                      final role = state.getRole(selectedBoardId!);
+                      if (role == 'viewer') {
+                        return const SizedBox.shrink();
+                      }
+                    }
+                    return ExpandableFab(
+                      distance: 60.0,
+                      onClose: () {},
+                      children: [
+                        ActionButton(
+                          onPressed: _pickAudio,
+                          icon: const Icon(Icons.mic_none),
+                          label: AppPreferences.tr('Âm thanh', 'Audio'),
+                        ),
+                        ActionButton(
+                          onPressed: _pickImage,
+                          icon: const Icon(Icons.image_outlined),
+                          label: AppPreferences.tr(
+                            'Ảnh & Video',
+                            'Image & Video',
+                          ),
+                        ),
+                        ActionButton(
+                          onPressed: () => _showAddTaskDialog(context),
+                          icon: const Icon(Icons.text_fields),
+                          label: AppPreferences.tr('Văn bản', 'Text'),
+                        ),
+                      ],
+                    );
+                  },
                 ),
         ),
       ),
@@ -619,169 +637,190 @@ class _BoardScreenState extends State<BoardScreen> {
           );
         }
       },
-      child: BlocBuilder<TaskBloc, TaskState>(
-        builder: (context, state) {
-          if (state is TaskLoading) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (state is TaskLoaded) {
-            final visibleTasks = _applyQuickFilter(state.tasks);
-            _checkOverdueNotifications(state.tasks);
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                final isWideScreen =
-                    constraints.maxWidth > 600 ||
-                    MediaQuery.of(context).orientation == Orientation.landscape;
-                final visibleStatuses = _quickFilter == 'mine'
-                    ? <String>['todo']
-                    : (_quickFilter == 'all'
-                          ? _defaultStatuses()
-                          : (_isSingleStatusFilter(_quickFilter)
-                                ? <String>[_quickFilter]
-                                : _defaultStatuses()));
+      child: BlocBuilder<BoardBloc, BoardState>(
+        builder: (context, boardState) {
+          return BlocBuilder<TaskBloc, TaskState>(
+            builder: (context, state) {
+              if (state is TaskLoading) {
+                return const Center(child: CircularProgressIndicator());
+              } else if (state is TaskLoaded) {
+                final visibleTasks = _applyQuickFilter(state.tasks);
+                _checkOverdueNotifications(state.tasks);
+                final currentRole = boardState is BoardLoaded
+                    ? boardState.getRole(selectedBoardId!)
+                    : null;
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWideScreen =
+                        constraints.maxWidth > 600 ||
+                        MediaQuery.of(context).orientation ==
+                            Orientation.landscape;
+                    final visibleStatuses = _quickFilter == 'mine'
+                        ? <String>['todo']
+                        : (_quickFilter == 'all'
+                              ? _defaultStatuses()
+                              : (_isSingleStatusFilter(_quickFilter)
+                                    ? <String>[_quickFilter]
+                                    : _defaultStatuses()));
 
-                if (isWideScreen) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Cột Menu bên trái
-                      Container(
-                        width: 250,
-                        color: Colors.white,
-                        child: Column(
-                          children: visibleStatuses
-                              .map(
-                                (status) => _buildMenuItem(
-                                  _statusTitle(status),
-                                  status,
-                                  _statusColor(status),
-                                  visibleTasks,
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ),
-                      // Kẻ dọc phân cách
-                      Container(width: 1, color: Colors.grey.withOpacity(0.2)),
-                      // Khu vực chứa thẻ bên phải
-                      Expanded(
-                        child: Container(
-                          color: Colors.grey[50], // Nền nhạt cho khu vực thẻ
-                          child: _buildLandscapeTaskContent(
-                            context,
-                            visibleTasks,
-                            selectedLandscapeStatus,
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                }
-
-                // Mặc định: Giao diện dọc (Portrait) - Menu sổ xuống
-                var portraitStatuses = List<String>.from(visibleStatuses);
-
-                // Tự động ẩn cột Quá hạn nếu không có việc và không bị lọc cứng
-                if (_quickFilter != 'overdue' &&
-                    portraitStatuses.contains('overdue')) {
-                  final hasOverdue = visibleTasks.any(_isOverdueTask);
-                  if (!hasOverdue) {
-                    portraitStatuses.remove('overdue');
-                  }
-                }
-
-                return SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 24,
-                  ),
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: double.infinity),
-                      child: Column(
+                    if (isWideScreen) {
+                      return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildBoardOverview(
-                            visibleTasks,
-                            allTasks: state.tasks,
-                            visibleStatuses: portraitStatuses,
-                          ),
-                          const SizedBox(height: 12),
-                          _buildQuickFilterChips(),
-                          const SizedBox(height: 18),
-                          for (var i = 0; i < portraitStatuses.length; i++) ...[
-                            _buildColumn(
-                              context,
-                              _statusTitle(portraitStatuses[i]),
-                              portraitStatuses[i],
-                              visibleTasks,
-                              _statusColor(portraitStatuses[i]),
+                          // Cột Menu bên trái
+                          Container(
+                            width: 250,
+                            color: Colors.white,
+                            child: Column(
+                              children: visibleStatuses
+                                  .map(
+                                    (status) => _buildMenuItem(
+                                      _statusTitle(status),
+                                      status,
+                                      _statusColor(status),
+                                      visibleTasks,
+                                      currentRole,
+                                    ),
+                                  )
+                                  .toList(),
                             ),
-                            if (i != portraitStatuses.length - 1)
-                              const SizedBox(height: 24),
-                          ],
-                          const SizedBox(height: 60), // Space for FAB
+                          ),
+                          // Kẻ dọc phân cách
+                          Container(
+                            width: 1,
+                            color: Colors.grey.withOpacity(0.2),
+                          ),
+                          // Khu vực chứa thẻ bên phải
+                          Expanded(
+                            child: Container(
+                              color:
+                                  Colors.grey[50], // Nền nhạt cho khu vực thẻ
+                              child: _buildLandscapeTaskContent(
+                                context,
+                                visibleTasks,
+                                selectedLandscapeStatus,
+                                currentRole,
+                              ),
+                            ),
+                          ),
                         ],
+                      );
+                    }
+
+                    // Mặc định: Giao diện dọc (Portrait) - Menu sổ xuống
+                    var portraitStatuses = List<String>.from(visibleStatuses);
+
+                    // Tự động ẩn cột Quá hạn nếu không có việc và không bị lọc cứng
+                    if (_quickFilter != 'overdue' &&
+                        portraitStatuses.contains('overdue')) {
+                      final hasOverdue = visibleTasks.any(_isOverdueTask);
+                      if (!hasOverdue) {
+                        portraitStatuses.remove('overdue');
+                      }
+                    }
+
+                    return SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 24,
                       ),
+                      child: Align(
+                        alignment: Alignment.topLeft,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: double.infinity,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildBoardOverview(
+                                visibleTasks,
+                                allTasks: state.tasks,
+                                visibleStatuses: portraitStatuses,
+                              ),
+                              const SizedBox(height: 12),
+                              _buildQuickFilterChips(),
+                              const SizedBox(height: 18),
+                              for (
+                                var i = 0;
+                                i < portraitStatuses.length;
+                                i++
+                              ) ...[
+                                _buildColumn(
+                                  context,
+                                  _statusTitle(portraitStatuses[i]),
+                                  portraitStatuses[i],
+                                  visibleTasks,
+                                  _statusColor(portraitStatuses[i]),
+                                  currentRole,
+                                ),
+                                if (i != portraitStatuses.length - 1)
+                                  const SizedBox(height: 24),
+                              ],
+                              const SizedBox(height: 60), // Space for FAB
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              } else if (state is TaskError) {
+                return Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.wifi_off_rounded,
+                          size: 64,
+                          color: Colors.redAccent,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          AppPreferences.tr(
+                            'Lỗi kết nối hoặc dữ liệu',
+                            'Connection or Data Error',
+                          ),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          state.message,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            if (selectedBoardId != null) {
+                              context.read<TaskBloc>().add(
+                                LoadTasks(
+                                  boardId: selectedBoardId,
+                                  query: searchController.text,
+                                ),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: Text(AppPreferences.tr('Thử lại', 'Retry')),
+                        ),
+                      ],
                     ),
                   ),
                 );
-              },
-            );
-          } else if (state is TaskError) {
-            return Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.wifi_off_rounded,
-                      size: 64,
-                      color: Colors.redAccent,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      AppPreferences.tr(
-                        'Lỗi kết nối hoặc dữ liệu',
-                        'Connection or Data Error',
-                      ),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      state.message,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        if (selectedBoardId != null) {
-                          context.read<TaskBloc>().add(
-                            LoadTasks(
-                              boardId: selectedBoardId,
-                              query: searchController.text,
-                            ),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.refresh),
-                      label: Text(AppPreferences.tr('Thử lại', 'Retry')),
-                    ),
-                  ],
+              }
+              return Center(
+                child: Text(
+                  AppPreferences.tr('Chưa có dữ liệu', 'No data available'),
                 ),
-              ),
-            );
-          }
-          return Center(
-            child: Text(
-              AppPreferences.tr('Chưa có dữ liệu', 'No data available'),
-            ),
+              );
+            },
           );
         },
       ),
@@ -980,6 +1019,7 @@ class _BoardScreenState extends State<BoardScreen> {
     String status,
     Color accentColor,
     List<Task> allTasks,
+    String? role,
   ) {
     final isSelected = selectedLandscapeStatus == status;
     final tasksCount = _tasksByStatus(allTasks, status).length;
@@ -1087,6 +1127,7 @@ class _BoardScreenState extends State<BoardScreen> {
     BuildContext context,
     List<Task> allTasks,
     String status,
+    String? role,
   ) {
     final tasks = _tasksByStatus(allTasks, status);
     final accentColor = _statusColor(status);
@@ -1151,6 +1192,9 @@ class _BoardScreenState extends State<BoardScreen> {
                   itemCount: tasks.length,
                   itemBuilder: (context, index) {
                     final task = tasks[index];
+                    if (role == 'viewer') {
+                      return TaskCard(task: task, accentColor: accentColor);
+                    }
                     return Draggable<Task>(
                       data: task,
                       feedback: Material(
@@ -1187,6 +1231,7 @@ class _BoardScreenState extends State<BoardScreen> {
     String status,
     List<Task> allTasks,
     Color accentColor,
+    String? role,
   ) {
     final tasks = _tasksByStatus(allTasks, status);
 
@@ -1285,6 +1330,12 @@ class _BoardScreenState extends State<BoardScreen> {
               ),
               childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               children: tasks.map((task) {
+                if (role == 'viewer') {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: TaskCard(task: task, accentColor: accentColor),
+                  );
+                }
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Draggable<Task>(

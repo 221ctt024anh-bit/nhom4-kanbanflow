@@ -27,6 +27,7 @@ import 'presentation/screens/login_screen.dart';
 import 'presentation/screens/my_profile_screen.dart';
 import 'presentation/screens/reset_password_screen.dart';
 import 'presentation/screens/settings_screen.dart';
+import 'presentation/screens/web_task_view_screen.dart';
 import 'data/repositories/friend_repository.dart';
 
 Future<void> main() async {
@@ -217,6 +218,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             themeMode: prefs.themeMode,
             theme: _lightTheme,
             darkTheme: _darkTheme,
+            onGenerateRoute: (settings) {
+              if (settings.name != null && settings.name!.startsWith('/task/')) {
+                final taskId = settings.name!.replaceFirst('/task/', '');
+                return MaterialPageRoute(
+                  builder: (context) => WebTaskViewScreen(taskId: taskId),
+                );
+              }
+              return null;
+            },
             home: BlocBuilder<AuthBloc, AuthState>(
               builder: (context, state) {
                 if (state is Authenticated) {

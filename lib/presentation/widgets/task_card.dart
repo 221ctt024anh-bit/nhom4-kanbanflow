@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/entities/task.dart';
 import '../blocs/task_bloc.dart';
 import '../blocs/task_event.dart';
+import '../blocs/board_bloc.dart';
+import '../blocs/board_state.dart';
 import '../screens/task_details_screen.dart';
 import 'user_avatar.dart';
 
@@ -97,8 +99,20 @@ class TaskCard extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      TaskDetailsScreen(task: task, accentColor: accentColor),
+                  builder: (context) => BlocProvider.value(
+                    value: BlocProvider.of<BoardBloc>(context),
+                    child: BlocBuilder<BoardBloc, BoardState>(
+                      builder: (context, state) {
+                        return TaskDetailsScreen(
+                          task: task,
+                          accentColor: accentColor,
+                          role: state is BoardLoaded
+                              ? state.getRole(task.boardId)
+                              : null,
+                        );
+                      },
+                    ),
+                  ),
                 ),
               );
             },
@@ -132,23 +146,32 @@ class TaskCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      InkWell(
-                        onTap: () => context.read<TaskBloc>().add(
-                          DeleteTaskEvent(task.id),
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Icon(
-                            Icons.close_rounded,
-                            color: Colors.black26,
-                            size: 16,
-                          ),
-                        ),
+                      BlocBuilder<BoardBloc, BoardState>(
+                        builder: (context, state) {
+                          if (state is BoardLoaded) {
+                            final role = state.getRole(task.boardId);
+                            if (role == 'viewer')
+                              return const SizedBox.shrink();
+                          }
+                          return InkWell(
+                            onTap: () => context.read<TaskBloc>().add(
+                              DeleteTaskEvent(task.id),
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.black26,
+                                size: 16,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),

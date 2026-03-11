@@ -99,6 +99,7 @@ class TaskRepositoryImpl implements TaskRepository {
       creatorId: task.creatorId,
       dueAt: task.dueAt,
       createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
       checklist: task.checklist,
       hasAttachments: task.hasAttachments,
       taskType: task.taskType,
@@ -141,6 +142,7 @@ class TaskRepositoryImpl implements TaskRepository {
       creatorId: task.creatorId,
       dueAt: task.dueAt,
       createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
       checklist: task.checklist,
       hasAttachments: task.hasAttachments,
       taskType: task.taskType,
@@ -211,6 +213,23 @@ class TaskRepositoryImpl implements TaskRepository {
         operation: 'delete',
         payload: jsonEncode({'id': id}),
       );
+    }
+  }
+
+  @override
+  Future<Task?> getTaskById(String id) async {
+    try {
+      final response = await supabaseClient
+          .from('tasks')
+          .select('*, task_assignees(user_id)')
+          .eq('id', id)
+          .maybeSingle();
+      
+      if (response == null) return null;
+      return TaskModel.fromMap(response as Map<String, dynamic>);
+    } catch (_) {
+      // Fallback to local if offline
+      return localDatabase.getTaskById(id);
     }
   }
 

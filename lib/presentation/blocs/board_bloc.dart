@@ -33,7 +33,7 @@ class BoardBloc extends Bloc<BoardEvent, BoardState> {
     }
     try {
       final boards = await getBoards.call();
-      emit(BoardLoaded(boards));
+      emit(BoardLoaded(boards, (id) => getBoards.repository.getRole(id)));
     } catch (e) {
       emit(BoardError(e.toString()));
     }
@@ -46,7 +46,8 @@ class BoardBloc extends Bloc<BoardEvent, BoardState> {
     emit(BoardLoading());
     await emit.forEach<List<Board>>(
       watchBoards.call(),
-      onData: (boards) => BoardLoaded(boards),
+      onData: (boards) =>
+          BoardLoaded(boards, (id) => watchBoards.repository.getRole(id)),
       onError: (e, stack) => BoardError(e.toString()),
     );
   }

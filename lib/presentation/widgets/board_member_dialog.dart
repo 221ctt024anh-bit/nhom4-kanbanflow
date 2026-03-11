@@ -156,6 +156,39 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
     }
   }
 
+  Future<void> _updateRole(String userId, String currentRole) async {
+    final String? newRole = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(AppPreferences.tr('Chọn vai trò', 'Select Role')),
+        children: ['admin', 'member', 'viewer'].map((r) {
+          return SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, r),
+            child: Text(
+              r == 'admin'
+                  ? AppPreferences.tr('Quản trị viên', 'Admin')
+                  : r == 'member'
+                  ? AppPreferences.tr('Thành viên', 'Member')
+                  : AppPreferences.tr('Chỉ xem', 'Viewer'),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+
+    if (newRole != null && newRole != currentRole) {
+      try {
+        final repository = di.sl<BoardRepository>();
+        await repository.updateMemberRole(widget.boardId, userId, newRole);
+        _loadMembers();
+      } catch (e) {
+        setState(() {
+          _error = e.toString();
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserId =
@@ -257,6 +290,7 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
                       itemCount: _members.length,
                       itemBuilder: (context, index) {
                         final member = _members[index];
+                        final isMemberOwner = member.id == widget.ownerId;
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: CircleAvatar(
@@ -277,23 +311,33 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
                             member.email,
                             style: const TextStyle(fontSize: 12),
                           ),
-                          trailing: (isOwner && member.id != widget.ownerId)
-                              ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _buildRoleChip(member.role),
-                                    const SizedBox(width: 4),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.remove_circle_outline,
-                                        color: Colors.redAccent,
-                                        size: 20,
-                                      ),
-                                      onPressed: () => _removeMember(member.id),
-                                    ),
-                                  ],
-                                )
-                              : _buildRoleChip(member.role),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                onTap: (isOwner && !isMemberOwner)
+                                    ? () => _updateRole(
+                                        member.id,
+                                        member.role ?? 'member',
+                                      )
+                                    : null,
+                                child: _buildRoleChip(
+                                  isMemberOwner ? 'owner' : member.role,
+                                ),
+                              ),
+                              if (isOwner && !isMemberOwner) ...[
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.remove_circle_outline,
+                                    color: Colors.redAccent,
+                                    size: 20,
+                                  ),
+                                  onPressed: () => _removeMember(member.id),
+                                ),
+                              ],
+                            ],
+                          ),
                         );
                       },
                     ),
@@ -394,29 +438,42 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
   }
 
   Widget _buildRoleChip(String? role) {
-    final isAdmin = role == 'admin';
+    Color color;
+    String label;
+
+    switch (role) {
+      case 'owner':
+        color = Colors.purple;
+        label = AppPreferences.tr('Chủ bảng', 'Owner');
+        break;
+      case 'admin':
+        color = Colors.orange;
+        label = AppPreferences.tr('Quản trị viên', 'Admin');
+        break;
+      case 'viewer':
+        color = Colors.grey;
+        label = AppPreferences.tr('Chỉ xem', 'Viewer');
+        break;
+      case 'member':
+      default:
+        color = Colors.blueAccent;
+        label = AppPreferences.tr('Thành viên', 'Member');
+        break;
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: isAdmin
-            ? Colors.orange.withOpacity(0.1)
-            : Colors.blueAccent.withOpacity(0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isAdmin
-              ? Colors.orange.withOpacity(0.5)
-              : Colors.blueAccent.withOpacity(0.5),
-          width: 0.5,
-        ),
+        border: Border.all(color: color.withOpacity(0.5), width: 0.5),
       ),
       child: Text(
-        isAdmin
-            ? AppPreferences.tr('Quản trị viên', 'Admin')
-            : AppPreferences.tr('Thành viên', 'Member'),
+        label,
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.bold,
-          color: isAdmin ? Colors.orange[800] : Colors.blueAccent,
+          color: color.withOpacity(0.8),
         ),
       ),
     );

@@ -11,6 +11,7 @@ import '../models/board_model.dart';
 class BoardRepositoryImpl implements BoardRepository {
   final SupabaseClient supabaseClient;
   final LocalDatabase localDatabase;
+  final Map<String, String> _roleCache = {}; // boardId -> role
 
   BoardRepositoryImpl({
     required this.supabaseClient,
@@ -40,6 +41,7 @@ class BoardRepositoryImpl implements BoardRepository {
       for (final row in (ownerResponse as List)) {
         final board = BoardModel.fromMap(row as Map<String, dynamic>);
         boardsMap[board.id] = board;
+        _updateRoleCache(board.id, 'owner');
       }
 
       for (final row in (memberResponse as List)) {
@@ -47,6 +49,18 @@ class BoardRepositoryImpl implements BoardRepository {
         if (boardData != null) {
           final board = BoardModel.fromMap(boardData as Map<String, dynamic>);
           boardsMap[board.id] = board;
+
+          // Get the role for this specific user on this board
+          final roleResp = await supabaseClient
+              .from('board_members')
+              .select('role')
+              .eq('board_id', board.id)
+              .eq('user_id', userId)
+              .maybeSingle();
+
+          if (roleResp != null) {
+            _updateRoleCache(board.id, roleResp['role'] as String?);
+          }
         }
       }
 
@@ -253,6 +267,30 @@ class BoardRepositoryImpl implements BoardRepository {
         .delete()
         .eq('board_id', boardId)
         .eq('user_id', userId);
+    // Invalidate cache for this board to force refresh
+    _roleCache.remove(boardId);
+  }
+
+  @override
+  Future<void> updateMemberRole(
+    String boardId,
+    String userId,
+    String role,
+  ) async {
+    await supabaseClient.from('board_members').update({'role': role}).match({
+      'board_id': boardId,
+      'user_id': userId,
+    });
+    // Invalidate cache for this board to force refresh
+    _roleCache.remove(boardId);
+  }
+
+  String? getRole(String boardId) => _roleCache[boardId];
+
+  void _updateRoleCache(String boardId, String? role) {
+    if (role != null) {
+      _roleCache[boardId] = role;
+    }
   }
 
   Future<void> _syncPendingBoardOperations() async {

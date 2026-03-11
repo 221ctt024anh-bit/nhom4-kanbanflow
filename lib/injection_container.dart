@@ -18,6 +18,7 @@ import 'data/repositories/chat_repository.dart';
 import 'data/repositories/auth_repository_impl.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'presentation/blocs/auth/auth_bloc.dart';
+import 'core/services/ai_service.dart';
 
 // (Nhớ check lại đường dẫn import file task_bloc của bạn cho chuẩn nhé)
 
@@ -30,6 +31,7 @@ Future<void> init() async {
   sl.registerLazySingleton<NotificationRepository>(
     () => NotificationRepository(client: sl()),
   );
+  sl.registerLazySingleton<AiService>(() => AiService());
 
   // 1. Khởi tạo BLoC (Factory: mỗi lần gọi tạo 1 instance mới)
   sl.registerFactory(() => AuthBloc(authRepository: sl()));

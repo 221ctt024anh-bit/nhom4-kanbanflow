@@ -12,6 +12,7 @@ class TaskModel extends Task {
     super.creatorId,
     super.dueAt,
     required super.createdAt,
+    super.updatedAt,
     super.checklist,
     super.hasAttachments = false,
     super.taskType = 'text',
@@ -59,6 +60,7 @@ class TaskModel extends Task {
           ? DateTime.tryParse(map['due_at'] as String)?.toLocal()
           : null,
       createdAt: map['created_at'] as String,
+      updatedAt: map['updated_at'] as String?,
       checklist: checklist,
       hasAttachments: map['has_attachments'] is bool
           ? map['has_attachments'] as bool
@@ -80,6 +82,7 @@ class TaskModel extends Task {
       if (creatorId != null) 'creator_id': creatorId,
       if (dueAt != null) 'due_at': dueAt!.toUtc().toIso8601String(),
       'created_at': createdAt,
+      'updated_at': updatedAt,
       'checklist': jsonEncode(checklist.map((e) => e.toMap()).toList()),
       'has_attachments': hasAttachments ? 1 : 0,
       'task_type': taskType ?? 'text',
@@ -97,6 +100,7 @@ class TaskModel extends Task {
       'creator_id': creatorId,
       'due_at': dueAt?.toUtc().toIso8601String(),
       'created_at': createdAt,
+      'updated_at': updatedAt,
       'checklist': jsonEncode(checklist.map((e) => e.toMap()).toList()),
       'has_attachments': hasAttachments,
       'task_type': taskType ?? 'text',

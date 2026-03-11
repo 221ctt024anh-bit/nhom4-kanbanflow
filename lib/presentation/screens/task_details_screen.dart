@@ -1,10 +1,12 @@
+import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:mime/mime.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../app_preferences.dart';
 import '../../injection_container.dart';
@@ -18,16 +20,26 @@ import '../../domain/repositories/board_repository.dart';
 import '../blocs/task_bloc.dart';
 import '../blocs/task_event.dart';
 import '../widgets/board_member_select_dialog.dart';
-import '../widgets/user_avatar.dart';
+
+import 'task_details/task_header.dart';
+import 'task_details/task_assignees.dart';
+import 'task_details/task_description.dart';
+import 'task_details/task_checklist.dart';
+import 'task_details/task_attachments.dart';
+import 'task_details/task_ratings.dart';
+import 'task_details/task_comments.dart';
+import '../../core/services/ai_service.dart';
 
 class TaskDetailsScreen extends StatefulWidget {
   final Task task;
   final Color accentColor;
+  final String? role;
 
   const TaskDetailsScreen({
     super.key,
     required this.task,
     required this.accentColor,
+    this.role,
   });
 
   @override
@@ -53,10 +65,21 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
   List<UserModel> _members = [];
   bool _loadingMembers = true;
 
+  bool _isEditingDescription = false;
+  late TextEditingController _descriptionController;
+  bool _isSavingDescription = false;
+  Timer? _debounceTimer;
+  bool _showSuccessHighlight = false;
+  bool _showSavedIndicator = false;
+
   @override
   void initState() {
     super.initState();
     _currentTask = widget.task;
+    _descriptionController = TextEditingController(
+      text: _currentTask.description,
+    );
+    _descriptionController.addListener(_onDescriptionChanged);
     _loadComments();
     _loadAttachments();
     _loadRatings();
@@ -66,6 +89,8 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
   @override
   void dispose() {
     _commentController.dispose();
+    _descriptionController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
   }
 
@@ -308,6 +333,168 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     }
   }
 
+  void _toggleEditDescription() {
+    if (widget.role == 'viewer') {
+      _showSnack(
+        AppPreferences.tr(
+          "Bạn không có quyền chỉnh sửa",
+          "You don't have permission to edit",
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _isEditingDescription = !_isEditingDescription;
+      if (!_isEditingDescription) {
+        _descriptionController.text =
+            _currentTask.description; // Reset if cancel
+      }
+    });
+  }
+
+  void _onDescriptionChanged() {
+    if (!_isEditingDescription) return;
+
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(seconds: 2), () {
+      if (_isEditingDescription) {
+        _autoSaveDescription();
+      }
+    });
+  }
+
+  Future<void> _autoSaveDescription() async {
+    final newDesc = _descriptionController.text.trim();
+    if (newDesc == _currentTask.description) return;
+
+    setState(() => _isSavingDescription = true);
+    final updatedTask = _currentTask.copyWith(
+      description: newDesc,
+      updatedAt: DateTime.now().toUtc().toIso8601String(),
+    );
+
+    try {
+      context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
+      setState(() {
+        _currentTask = updatedTask;
+        _showSavedIndicator = true;
+      });
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _showSavedIndicator = false);
+      });
+    } catch (_) {
+      // Ignore auto-save error to avoid annoying user
+    } finally {
+      if (mounted) {
+        setState(() => _isSavingDescription = false);
+      }
+    }
+  }
+
+  Future<void> _saveDescription() async {
+    _debounceTimer?.cancel();
+    final newDesc = _descriptionController.text.trim();
+    setState(() => _isSavingDescription = true);
+
+    final updatedTask = _currentTask.copyWith(
+      description: newDesc,
+      updatedAt: DateTime.now().toUtc().toIso8601String(),
+    );
+    try {
+      context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
+      setState(() {
+        _currentTask = updatedTask;
+        _isEditingDescription = false;
+        _showSuccessHighlight = true;
+      });
+
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _showSuccessHighlight = false);
+      });
+
+      _showSnack(AppPreferences.tr('Đã lưu mô tả', 'Description saved'));
+    } catch (_) {
+      _showSnack(AppPreferences.tr('Lưu thất bại', 'Save failed'));
+    } finally {
+      if (mounted) {
+        setState(() => _isSavingDescription = false);
+      }
+    }
+  }
+
+  void _insertMarkdownTag(String tag, {String? endTag}) {
+    final text = _descriptionController.text;
+    final selection = _descriptionController.selection;
+    final selectedText = selection.textInside(text);
+
+    String newText;
+    if (endTag != null) {
+      newText = text.replaceRange(
+        selection.start,
+        selection.end,
+        '$tag$selectedText$endTag',
+      );
+    } else {
+      newText = text.replaceRange(
+        selection.start,
+        selection.end,
+        '$tag$selectedText',
+      );
+    }
+
+    _descriptionController.text = newText;
+    _descriptionController.selection = TextSelection.collapsed(
+      offset: selection.start + tag.length + selectedText.length,
+    );
+  }
+
+  void _applyTemplate(String type) {
+    String template = '';
+    switch (type) {
+      case 'bug':
+        template = '''### 🐞 Bug Report
+**Description:** 
+**Steps to Reproduce:**
+1. 
+2. 
+**Actual Result:**
+**Expected Result:**
+**Device/OS:**''';
+        break;
+      case 'feature':
+        template = '''### 🚀 Feature Request
+**Objective:** 
+**Requirements:**
+- [ ] 
+- [ ] 
+**User Story:**''';
+        break;
+      case 'meeting':
+        template = '''### 📅 Meeting Notes
+**Attendees:** 
+**Agenda:**
+- 
+**Key Decisions:**
+- 
+**Action Items:**
+- [ ] ''';
+        break;
+      case 'research':
+        template = '''### 🔍 Research Study
+**Topic:** 
+**Goals:**
+**Findings:**
+**References:**''';
+        break;
+    }
+
+    if (_descriptionController.text.isNotEmpty) {
+      _descriptionController.text += '\\n\\n$template';
+    } else {
+      _descriptionController.text = template;
+    }
+  }
+
   Future<void> _rateTask(int score) async {
     if (score < 1 || score > 5) return;
     final userId = Supabase.instance.client.auth.currentUser?.id;
@@ -344,114 +531,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  String _statusLabel(String status) {
-    if (status == 'todo') return AppPreferences.tr('Cần làm', 'To Do');
-    if (status == 'doing') return AppPreferences.tr('Đang làm', 'Doing');
-    return AppPreferences.tr('Hoàn thành', 'Done');
-  }
 
-  String _formatDate(String value) {
-    var date = DateTime.tryParse(value);
-    if (date == null) return value;
-    // Đảm bảo chuyển về giờ địa phương nếu chuỗi ISO là UTC
-    if (!date.isUtc && value.endsWith('Z')) {
-      date = date.toLocal();
-    } else if (value.contains('+') || (value.length > 19 && value[19] == '+')) {
-      // Offset đã được parse tự động bởi tryParse, nhưng ta vẫn gọi toLocal cho chắc chắn
-      date = date.toLocal();
-    } else {
-      date = date.toLocal();
-    }
-
-    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} '
-        '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-  }
-
-  String _timeAgo(String value) {
-    var date = DateTime.tryParse(value);
-    if (date == null) return value;
-    date = date.toLocal();
-
-    final diff = DateTime.now().difference(date);
-    if (diff.inMinutes < 1) return AppPreferences.tr('Vừa xong', 'Just now');
-    if (diff.inMinutes < 60)
-      return AppPreferences.tr(
-        '${diff.inMinutes} phút trước',
-        '${diff.inMinutes}m ago',
-      );
-    if (diff.inHours < 24)
-      return AppPreferences.tr(
-        '${diff.inHours} giờ trước',
-        '${diff.inHours}h ago',
-      );
-    if (diff.inDays < 7)
-      return AppPreferences.tr(
-        '${diff.inDays} ngày trước',
-        '${diff.inDays}d ago',
-      );
-
-    return _formatDate(value);
-  }
-
-  Widget _buildPriorityPreview() {
-    if (_loadingAttachments) return const SizedBox.shrink();
-    if (_attachments.isEmpty) return const SizedBox.shrink();
-
-    final imageIndex = _attachments.indexWhere(
-      (e) => lookupMimeType(e.fileName)?.startsWith('image/') == true,
-    );
-
-    if (imageIndex != -1) {
-      final image = _attachments[imageIndex];
-      return Container(
-        width: double.infinity,
-        height: 280,
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () => _openAttachment(image),
-                child: Image.network(
-                  image.publicUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const Center(
-                    child: Icon(
-                      Icons.broken_image,
-                      size: 64,
-                      color: Colors.grey,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 16,
-              right: 16,
-              child: FloatingActionButton.small(
-                onPressed: () => _openAttachment(image),
-                backgroundColor: Colors.white,
-                child: const Icon(
-                  Icons.fullscreen_rounded,
-                  color: Colors.blueAccent,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    return const SizedBox.shrink();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -465,48 +545,111 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF1E293B),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.qr_code_2),
+            tooltip: AppPreferences.tr('Mở trên Web', 'Open on Web'),
+            onPressed: _showShareTaskDialog,
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            _buildHeader(),
-            _buildPriorityPreview(),
+            TaskHeader(
+              task: _currentTask,
+              accentColor: widget.accentColor,
+            ),
+            PriorityPreview(
+              attachments: _attachments,
+              loading: _loadingAttachments,
+              onOpen: _openAttachment,
+            ),
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (_currentTask.checklist.isNotEmpty) ...[
-                    _buildChecklistSection(),
-                    const SizedBox(height: 24),
-                  ],
-                  _buildAssigneeSection(),
+                  TaskChecklist(
+                    task: _currentTask,
+                    role: widget.role,
+                    accentColor: widget.accentColor,
+                    onToggleItem: _toggleChecklistItem,
+                    onEditItem: _editChecklistItem,
+                    onDeleteItem: _deleteChecklistItem,
+                  ),
                   const SizedBox(height: 24),
-                  if (_attachments.isNotEmpty &&
-                      !_attachments.any(
-                        (e) =>
-                            lookupMimeType(e.fileName)?.startsWith('image/') ==
-                            true,
-                      )) ...[
-                    _buildAttachmentsSection(),
-                    const SizedBox(height: 24),
-                  ],
-                  _buildDescriptionSection(),
+                  TaskAssignees(
+                    task: _currentTask,
+                    role: widget.role,
+                    loadingMembers: _loadingMembers,
+                    members: _members,
+                    onEditAssignees: () async {
+                      final selectedUserIds = await showDialog<List<String>>(
+                        context: context,
+                        builder: (context) => BoardMemberSelectDialog(
+                          boardId: _currentTask.boardId,
+                          currentAssigneeIds: _currentTask.assigneeIds,
+                        ),
+                      );
+                      if (selectedUserIds == null) return;
+
+                      final updatedTask = _currentTask.copyWith(
+                        assigneeIds: selectedUserIds,
+                      );
+
+                      setState(() => _currentTask = updatedTask);
+                      if (!mounted) return;
+                      context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
+                    },
+                  ),
                   const SizedBox(height: 24),
-                  _buildRatingSection(),
+                  TaskAttachments(
+                    attachments: _attachments,
+                    role: widget.role,
+                    loading: _loadingAttachments,
+                    uploading: _uploadingAttachment,
+                    onPickAndUpload: _pickAndUploadAttachment,
+                    onOpen: _openAttachment,
+                    onDelete: _deleteAttachment,
+                  ),
                   const SizedBox(height: 24),
-                  if (_currentTask.checklist.isEmpty) ...[
-                    // Only show if it was hidden above
-                  ],
-                  if (_attachments.any(
-                    (e) =>
-                        lookupMimeType(e.fileName)?.startsWith('image/') ==
-                        true,
-                  )) ...[
-                    _buildAttachmentsSection(),
-                    const SizedBox(height: 24),
-                  ],
-                  _buildCommentsSection(),
+                  TaskDescription(
+                    task: _currentTask,
+                    role: widget.role,
+                    accentColor: widget.accentColor,
+                    isEditing: _isEditingDescription,
+                    isSaving: _isSavingDescription,
+                    showSuccessHighlight: _showSuccessHighlight,
+                    showSavedIndicator: _showSavedIndicator,
+                    descriptionController: _descriptionController,
+                    onToggleEdit: _toggleEditDescription,
+                    onSave: _saveDescription,
+                    onInsertMarkdownTag: _insertMarkdownTag,
+                    onApplyTemplate: _applyTemplate,
+                    onAIAssist: _showAIAssistSheet,
+                  ),
+                  const SizedBox(height: 24),
+                  TaskRatings(
+                    myRating: _myRating,
+                    loading: _loadingRating,
+                    saving: _savingRating,
+                    avgRating: _avgRating,
+                    ratingCount: _ratingCount,
+                    onRate: _rateTask,
+                  ),
+                  const SizedBox(height: 24),
+                  TaskComments(
+                    comments: _comments,
+                    loading: _loadingComments,
+                    sending: _sendingComment,
+                    role: widget.role,
+                    commentController: _commentController,
+                    onAdd: _addComment,
+                    onDelete: _deleteComment,
+                    accentColor: widget.accentColor,
+                  ),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -517,898 +660,109 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     );
   }
 
-  Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _currentTask.title,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF1E293B),
-              height: 1.2,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _buildBadge(
-                _statusLabel(_currentTask.status),
-                widget.accentColor.withOpacity(0.12),
-                widget.accentColor,
-              ),
-              _buildBadge(
-                _formatDate(_currentTask.createdAt),
-                Colors.grey.withOpacity(0.08),
-                const Color(0xFF64748B),
-              ),
-              if (_currentTask.dueAt != null)
-                _buildBadge(
-                  AppPreferences.tr(
-                    'Hạn: ${_formatDueAt(_currentTask.dueAt!.toLocal())}',
-                    'Due: ${_formatDueAt(_currentTask.dueAt!.toLocal())}',
-                  ),
-                  Colors.orange.withOpacity(0.12),
-                  Colors.orange[800]!,
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBadge(String text, Color bgColor, Color textColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: textColor,
-          fontWeight: FontWeight.w700,
-          fontSize: 12,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title, {Widget? trailing}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF64748B),
-            letterSpacing: 0.5,
-          ),
-        ),
-        if (trailing != null) trailing,
-      ],
-    );
-  }
-
-  Widget _buildAssigneeSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(
-          AppPreferences.tr('NGƯỜI THỰC HIỆN', 'ASSIGNEES'),
-          trailing: TextButton.icon(
-            onPressed: () async {
-              final selectedUserIds = await showDialog<List<String>>(
-                context: context,
-                builder: (context) => BoardMemberSelectDialog(
-                  boardId: _currentTask.boardId,
-                  currentAssigneeIds: _currentTask.assigneeIds,
-                ),
-              );
-              if (selectedUserIds == null) return;
-
-              final updatedTask = Task(
-                id: _currentTask.id,
-                boardId: _currentTask.boardId,
-                title: _currentTask.title,
-                description: _currentTask.description,
-                status: _currentTask.status,
-                creatorId: _currentTask.creatorId,
-                createdAt: _currentTask.createdAt,
-                assigneeIds: selectedUserIds,
-                dueAt: _currentTask.dueAt,
-                checklist: _currentTask.checklist,
-                hasAttachments: _currentTask.hasAttachments,
-                taskType: _currentTask.taskType,
-              );
-
-              setState(() => _currentTask = updatedTask);
-              if (!mounted) return;
-              context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
-            },
-            icon: const Icon(Icons.edit_outlined, size: 16),
-            label: Text(AppPreferences.tr('Thay đổi', 'Change')),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: _currentTask.assigneeIds.isNotEmpty
-              ? Column(
-                  children: _currentTask.assigneeIds.map((uid) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: Row(
-                        children: [
-                          UserAvatar(userId: uid, radius: 20, showName: true),
-                          const SizedBox(width: 12),
-                          const Spacer(),
-                          if (!_loadingMembers) _buildAssigneeRoleChip(uid),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                )
-              : Text(
-                  AppPreferences.tr('Chưa giao cho ai', 'Unassigned'),
-                  style: const TextStyle(
-                    color: Color(0xFF94A3B8),
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAssigneeRoleChip(String userId) {
-    if (_members.isEmpty) return const SizedBox.shrink();
-    final member = _members.cast<UserModel?>().firstWhere(
-      (m) => m?.id == userId,
-      orElse: () => null,
-    );
-    if (member == null || member.role == null) return const SizedBox.shrink();
-
-    final isAdmin = member.role == 'admin';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: isAdmin
-            ? Colors.orange.withOpacity(0.1)
-            : Colors.blueAccent.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isAdmin
-              ? Colors.orange.withOpacity(0.5)
-              : Colors.blueAccent.withOpacity(0.5),
-          width: 0.5,
-        ),
-      ),
-      child: Text(
-        isAdmin
-            ? AppPreferences.tr('Quản trị viên', 'Admin')
-            : AppPreferences.tr('Thành viên', 'Member'),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          color: isAdmin ? Colors.orange[800] : Colors.blueAccent,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDescriptionSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(AppPreferences.tr('MÔ TẢ CHI TIẾT', 'DESCRIPTION')),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Text(
-            _currentTask.description.isEmpty
-                ? AppPreferences.tr(
-                    'Chưa có mô tả cho task này.',
-                    'No description for this task.',
-                  )
-                : _currentTask.description,
-            style: TextStyle(
-              fontSize: 15,
-              color: _currentTask.description.isEmpty
-                  ? const Color(0xFF94A3B8)
-                  : const Color(0xFF334155),
-              fontStyle: _currentTask.description.isEmpty
-                  ? FontStyle.italic
-                  : FontStyle.normal,
-              height: 1.6,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRatingSection() {
-    final myScore = _myRating?.rating ?? 0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(AppPreferences.tr('ĐÁNH GIÁ TASK', 'TASK RATING')),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: _loadingRating
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(),
-                  ),
-                )
-              : Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(5, (index) {
-                        final star = index + 1;
-                        final active = star <= myScore;
-                        return IconButton(
-                          onPressed: _savingRating
-                              ? null
-                              : () => _rateTask(star),
-                          iconSize: 32,
-                          icon: Icon(
-                            active
-                                ? Icons.star_rounded
-                                : Icons.star_outline_rounded,
-                            color: active
-                                ? Colors.amber[600]
-                                : const Color(0xFFCBD5E1),
-                          ),
-                          tooltip: '$star ${AppPreferences.tr('sao', 'stars')}',
-                        );
-                      }),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _ratingCount == 0
-                          ? AppPreferences.tr(
-                              'Chưa có đánh giá',
-                              'No ratings yet',
-                            )
-                          : '${AppPreferences.tr('Trung bình', 'Average')}: ${_avgRating.toStringAsFixed(1)}/5 ($_ratingCount ${AppPreferences.tr('đánh giá', 'ratings')})',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildChecklistSection() {
-    if (_currentTask.checklist.isEmpty) return const SizedBox.shrink();
-
-    final doneCount = _currentTask.checklist.where((e) => e.isDone).length;
-    final totalCount = _currentTask.checklist.length;
-    final progress = totalCount == 0 ? 0.0 : doneCount / totalCount;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildSectionTitle(
-              AppPreferences.tr('DANH SÁCH CÔNG VIỆC', 'CHECKLIST'),
-            ),
-            Text(
-              '$doneCount/$totalCount',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: widget.accentColor,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: progress,
-            backgroundColor: widget.accentColor.withOpacity(0.1),
-            valueColor: AlwaysStoppedAnimation<Color>(widget.accentColor),
-            minHeight: 6,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: _currentTask.checklist.map((item) {
-              return Theme(
-                data: ThemeData(
-                  checkboxTheme: CheckboxThemeData(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-                child: CheckboxListTile(
-                  title: Text(
-                    item.title,
-                    style: TextStyle(
-                      decoration: item.isDone
-                          ? TextDecoration.lineThrough
-                          : null,
-                      color: item.isDone
-                          ? Colors.grey
-                          : const Color(0xFF334155),
-                      fontSize: 14,
-                      fontWeight: item.isDone
-                          ? FontWeight.normal
-                          : FontWeight.w500,
-                    ),
-                  ),
-                  value: item.isDone,
-                  onChanged: (val) => _toggleChecklistItem(item),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  activeColor: widget.accentColor,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                  dense: true,
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ],
-    );
-  }
-
   void _toggleChecklistItem(ChecklistItem item) {
+    if (widget.role == 'viewer') {
+      _showSnack(
+        AppPreferences.tr(
+          'Bạn không có quyền chỉnh sửa',
+          'You do not have permission to edit',
+        ),
+      );
+      return;
+    }
     final newList = _currentTask.checklist.map((e) {
       if (e.id == item.id) return e.copyWith(isDone: !e.isDone);
       return e;
     }).toList();
 
-    final updatedTask = Task(
-      id: _currentTask.id,
-      boardId: _currentTask.boardId,
-      title: _currentTask.title,
-      description: _currentTask.description,
-      status: _currentTask.status,
-      creatorId: _currentTask.creatorId,
-      createdAt: _currentTask.createdAt,
-      assigneeIds: _currentTask.assigneeIds,
-      dueAt: _currentTask.dueAt,
-      checklist: newList,
-    );
+    final updatedTask = _currentTask.copyWith(checklist: newList);
 
     setState(() => _currentTask = updatedTask);
     context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
   }
 
-  Widget _buildAttachmentsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(
-          AppPreferences.tr('TỆP ĐÍNH KÈM', 'ATTACHMENTS'),
-          trailing: TextButton.icon(
-            onPressed: _uploadingAttachment ? null : _pickAndUploadAttachment,
-            icon: _uploadingAttachment
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.add_circle_outline, size: 16),
-            label: Text(AppPreferences.tr('Thêm tệp', 'Add file')),
+  void _editChecklistItem(ChecklistItem item) async {
+    if (widget.role == 'viewer') return;
+    final controller = TextEditingController(text: item.title);
+    final newTitle = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(AppPreferences.tr('Sửa công việc', 'Edit Task')),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: AppPreferences.tr('Nhập tên công việc...', 'Enter task name...'),
           ),
         ),
-        const SizedBox(height: 12),
-        if (_loadingAttachments)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: CircularProgressIndicator(),
-            ),
-          )
-        else if (_attachments.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(AppPreferences.tr('Hủy', 'Cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: Text(AppPreferences.tr('Lưu', 'Save')),
+          ),
+        ],
+      ),
+    );
+
+    if (newTitle == null || newTitle.trim().isEmpty || newTitle == item.title) return;
+
+    final newList = _currentTask.checklist.map((e) {
+      if (e.id == item.id) return e.copyWith(title: newTitle.trim());
+      return e;
+    }).toList();
+
+    final updatedTask = _currentTask.copyWith(checklist: newList);
+    setState(() => _currentTask = updatedTask);
+    context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
+  }
+
+  void _deleteChecklistItem(ChecklistItem item) {
+    if (widget.role == 'viewer') return;
+    final newList = _currentTask.checklist.where((e) => e.id != item.id).toList();
+    final updatedTask = _currentTask.copyWith(checklist: newList);
+    setState(() => _currentTask = updatedTask);
+    context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
+  }
+
+  void _showAIAssistSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome, color: Colors.purple),
+                const SizedBox(width: 8),
+                Text(
+                  AppPreferences.tr('Trợ lý AI', 'AI Assistant'),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
-            child: Center(
-              child: Text(
-                AppPreferences.tr('Chưa có tệp đính kèm', 'No attachments yet'),
-                style: const TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontStyle: FontStyle.italic,
-                  fontSize: 14,
-                ),
-              ),
+            const SizedBox(height: 20),
+            _buildAIAction(
+              Icons.auto_fix_high,
+              AppPreferences.tr('Viết lại rõ ràng hơn', 'Rephrase clearly'),
+              () => _runAIAssist('polish'),
             ),
-          )
-        else
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.4,
-            ),
-            itemCount: _attachments.length,
-            itemBuilder: (context, index) {
-              final item = _attachments[index];
-              final isImage =
-                  lookupMimeType(item.fileName)?.startsWith('image/') == true;
-              final isAudio =
-                  lookupMimeType(item.fileName)?.startsWith('audio/') == true;
-
-              return Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: () => _openAttachment(item),
-                  child: Stack(
-                    children: [
-                      if (isImage)
-                        Positioned.fill(
-                          child: Image.network(
-                            item.publicUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              color: const Color(0xFFF1F5F9),
-                              child: const Icon(
-                                Icons.broken_image,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                        )
-                      else
-                        Positioned.fill(
-                          child: Container(
-                            color: const Color(0xFFF1F5F9),
-                            child: Icon(
-                              isAudio
-                                  ? Icons.mic_rounded
-                                  : Icons.insert_drive_file_outlined,
-                              size: 32,
-                              color: const Color(0xFF64748B),
-                            ),
-                          ),
-                        ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: [
-                                Colors.black.withOpacity(0.7),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  item.fileName,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              IconButton(
-                                constraints: const BoxConstraints(),
-                                padding: EdgeInsets.zero,
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.white,
-                                  size: 16,
-                                ),
-                                onPressed: () => _deleteAttachment(item),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-      ],
-    );
-  }
-
-  Widget _buildCommentsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(AppPreferences.tr('BÌNH LUẬN', 'COMMENTS')),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              if (_loadingComments)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: CircularProgressIndicator(),
-                  ),
-                )
-              else if (_comments.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF6F8FA),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFFD0D7DE)),
-                        ),
-                        child: const Icon(
-                          Icons.mode_comment_outlined,
-                          size: 32,
-                          color: Color(0xFF636C76),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        AppPreferences.tr(
-                          'Chưa có thảo luận nào.',
-                          'No discussions yet.',
-                        ),
-                        style: const TextStyle(
-                          color: Color(0xFF1F2328),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        AppPreferences.tr(
-                          'Hãy bắt đầu cuộc hội thoại ngay bây giờ!',
-                          'Start the conversation now!',
-                        ),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Color(0xFF636C76),
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                ListView.builder(
-                  physics: const NeverScrollableScrollPhysics(),
-                  shrinkWrap: true,
-                  itemCount: _comments.length,
-                  itemBuilder: (context, index) {
-                    final item = _comments[index];
-                    return _buildGitHubCommentItem(item);
-                  },
-                ),
-              const SizedBox(height: 12),
-              const Divider(),
-              const SizedBox(height: 12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: TextField(
-                        controller: _commentController,
-                        minLines: 2,
-                        maxLines: 10,
-                        decoration: InputDecoration(
-                          hintText: AppPreferences.tr(
-                            'Viết bình luận (Hỗ trợ Markdown)...',
-                            'Write a comment (Markdown supported)...',
-                          ),
-                          hintStyle: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 14,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.all(16),
-                        ),
-                        style: const TextStyle(fontSize: 14, height: 1.5),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: _sendingComment ? null : _addComment,
-                    child: Container(
-                      height: 48,
-                      width: 48,
-                      decoration: BoxDecoration(
-                        color: widget.accentColor,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: widget.accentColor.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: _sendingComment
-                          ? const Center(
-                              child: SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            )
-                          : const Icon(
-                              Icons.send_rounded,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildGitHubCommentItem(TaskComment item) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            UserAvatar(userId: item.userId, radius: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: const Color(0xFFD0D7DE)),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF6F8FA),
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(7),
-                        ),
-                        border: Border(
-                          bottom: BorderSide(color: Color(0xFFD0D7DE)),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Wrap(
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                UserAvatar(
-                                  userId: item.userId,
-                                  radius: 10,
-                                  showName: true,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  AppPreferences.tr(
-                                    'đã bình luận ${_timeAgo(item.createdAt)}',
-                                    'commented ${_timeAgo(item.createdAt)}',
-                                  ),
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFF636C76),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (item.userId ==
-                              Supabase.instance.client.auth.currentUser?.id)
-                            PopupMenuButton<String>(
-                              padding: EdgeInsets.zero,
-                              icon: const Icon(
-                                Icons.more_horiz,
-                                size: 18,
-                                color: Color(0xFF636C76),
-                              ),
-                              onSelected: (value) {
-                                if (value == 'delete') {
-                                  _deleteComment(item.id);
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.delete_outline,
-                                        size: 18,
-                                        color: Colors.red,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        AppPreferences.tr('Xóa', 'Delete'),
-                                        style: const TextStyle(
-                                          color: Colors.red,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ),
-                    // Content
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: MarkdownBody(
-                        data: item.content,
-                        styleSheet: MarkdownStyleSheet(
-                          p: const TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFF1F2328),
-                            height: 1.5,
-                          ),
-                          code: TextStyle(
-                            backgroundColor: Colors.grey[100],
-                            fontFamily: 'monospace',
-                            fontSize: 13,
-                          ),
-                          codeblockDecoration: BoxDecoration(
-                            color: const Color(0xFFF6F8FA),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFFD0D7DE)),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            _buildAIAction(
+              Icons.checklist_rtl,
+              AppPreferences.tr('Tạo checklist từ mô tả', 'Generate checklist'),
+              () => _runAIAssist('checklist'),
             ),
           ],
         ),
@@ -1416,12 +770,149 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     );
   }
 
-  String _formatDueAt(DateTime dateTime) {
-    final local = dateTime.toLocal();
-    return '${local.day.toString().padLeft(2, '0')}/'
-        '${local.month.toString().padLeft(2, '0')}/'
-        '${local.year} '
-        '${local.hour.toString().padLeft(2, '0')}:'
-        '${local.minute.toString().padLeft(2, '0')}';
+  Widget _buildAIAction(IconData icon, String title, VoidCallback onTap) {
+    return ListTile(
+      leading: Icon(icon, color: widget.accentColor),
+      title: Text(title),
+      trailing: const Icon(Icons.chevron_right, size: 18),
+      onTap: () {
+        Navigator.pop(context);
+        onTap();
+      },
+    );
+  }
+
+  void _runAIAssist(String type) async {
+    final aiService = sl<AiService>();
+    final originalText = _descriptionController.text;
+    
+    if (originalText.trim().isEmpty) {
+      _showSnack(AppPreferences.tr('Vui lòng nhập mô tả trước!', 'Please enter a description first!'));
+      return;
+    }
+
+    setState(() => _isSavingDescription = true);
+
+    try {
+      if (type == 'polish') {
+        final polished = await aiService.polishText(
+          text: originalText,
+          title: _currentTask.title,
+          checklistItems: _currentTask.checklist.map((e) => e.title).toList(),
+        );
+        if (!mounted) return;
+        _descriptionController.text = polished;
+        _showSnack(AppPreferences.tr('AI đã tối ưu hóa mô tả!', 'AI polished the description!'));
+      } else if (type == 'checklist') {
+        final items = await aiService.generateChecklist(originalText);
+        if (!mounted) return;
+        
+        if (items.isEmpty) {
+          _showSnack(AppPreferences.tr('AI không tìm thấy đầu mục nào.', 'AI found no checklist items.'));
+        } else {
+          // Add generated items to current task checklist
+          final currentItems = List<ChecklistItem>.from(_currentTask.checklist);
+          final newItems = items.map((e) => ChecklistItem(
+            id: DateTime.now().millisecondsSinceEpoch.toString() + e.hashCode.toString(),
+            title: e,
+            isDone: false,
+          )).toList();
+          
+          final updatedTask = _currentTask.copyWith(
+            checklist: [...currentItems, ...newItems],
+          );
+          
+          setState(() => _currentTask = updatedTask);
+          context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
+          _showSnack(AppPreferences.tr('AI đã tạo ${items.length} đầu mục!', 'AI generated ${items.length} items!'));
+        }
+      }
+    } catch (e) {
+      _showSnack(AppPreferences.tr('Lỗi AI: $e', 'AI Error: $e'));
+    } finally {
+      if (mounted) {
+        setState(() => _isSavingDescription = false);
+      }
+    }
+  }
+
+  void _showShareTaskDialog() {
+    // URL for the deployed web app on Netlify
+    const baseUrl = "https://capable-gelato-8b83e8.netlify.app/task/";
+    final taskUrl = "$baseUrl${_currentTask.id}";
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Center(
+          child: Text(
+            AppPreferences.tr('Mở trên màn hình lớn', 'Open on Large Screen'),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: QrImageView(
+                data: taskUrl,
+                version: QrVersions.auto,
+                size: 200.0,
+                gapless: false,
+                embeddedImage: const AssetImage('assets/app_icon.png'),
+                embeddedImageStyle: const QrEmbeddedImageStyle(
+                  size: Size(40, 40),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              AppPreferences.tr(
+                'Quét mã để xem chi tiết trên Web',
+                'Scan to view details on Web',
+              ),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () => Share.share(
+                AppPreferences.tr(
+                  'Xem task này trên Web: $taskUrl',
+                  'View this task on Web: $taskUrl',
+                ),
+              ),
+              icon: const Icon(Icons.share, size: 18),
+              label: Text(AppPreferences.tr('Chia sẻ link', 'Share link')),
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(AppPreferences.tr('Đóng', 'Close')),
+          ),
+        ],
+      ),
+    );
   }
 }

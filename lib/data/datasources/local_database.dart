@@ -63,7 +63,7 @@ class LocalDatabase {
 
     return openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -105,6 +105,11 @@ class LocalDatabase {
         await db.execute('ALTER TABLE tasks ADD COLUMN assignee_ids TEXT');
       } catch (_) {}
     }
+    if (oldVersion < 8) {
+      try {
+        await db.execute('ALTER TABLE tasks ADD COLUMN updated_at TEXT');
+      } catch (_) {}
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -132,6 +137,7 @@ class LocalDatabase {
         has_attachments INTEGER DEFAULT 0,
         task_type TEXT DEFAULT "text",
         created_at TEXT NOT NULL,
+        updated_at TEXT,
         FOREIGN KEY (board_id) REFERENCES boards (id) ON DELETE CASCADE
       )
     ''');
@@ -246,6 +252,13 @@ class LocalDatabase {
   Future<int> deleteTask(String id) async {
     final db = await database;
     return db.delete('tasks', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<TaskModel?> getTaskById(String id) async {
+    final db = await database;
+    final result = await db.query('tasks', where: 'id = ?', whereArgs: [id]);
+    if (result.isEmpty) return null;
+    return TaskModel.fromMap(Map<String, dynamic>.from(result.first));
   }
 
   Future<int> enqueueOperation({
