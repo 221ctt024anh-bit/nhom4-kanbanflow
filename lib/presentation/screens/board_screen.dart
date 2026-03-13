@@ -20,7 +20,6 @@ import '../blocs/auth/auth_state.dart';
 import '../widgets/empty_dashboard_view.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:mime/mime.dart';
-import '../widgets/task_card.dart';
 import '../widgets/board_member_dialog.dart';
 import '../widgets/board_member_select_dialog.dart';
 import '../widgets/user_avatar.dart';
@@ -29,6 +28,11 @@ import 'workspace_menu_screen.dart';
 import '../../app_preferences.dart';
 import '../../injection_container.dart';
 import '../../data/repositories/task_interaction_repository.dart';
+import '../widgets/board/board_utils.dart';
+import '../widgets/board/board_overview.dart';
+import '../widgets/board/quick_filter_chips.dart';
+import '../widgets/board/board_column.dart';
+import '../widgets/board/landscape_board_widgets.dart';
 import '../widgets/notification_dialog.dart';
 
 class BoardScreen extends StatefulWidget {
@@ -47,14 +51,13 @@ class _BoardScreenState extends State<BoardScreen> {
   bool isSearching = false;
   final TextEditingController searchController = TextEditingController();
   final PageController _pageController = PageController(viewportFraction: 0.88);
-  Timer? _notificationTimer;
+  Timer? _taskReloadDebounce;
   int _unreadNotificationCount = 0;
   bool _loadingNotifications = false;
   List<AppNotification> _notifications = [];
   bool _inAppNotificationsEnabled = true;
   final Set<String> _notifiedOverdueIds = {};
   RealtimeChannel? _notificationChannel;
-  RealtimeChannel? _boardsChannel;
   RealtimeChannel? _tasksChannel;
 
   @override
@@ -63,7 +66,6 @@ class _BoardScreenState extends State<BoardScreen> {
     searchController.addListener(_onSearchChanged);
     _initNotificationFlow();
     _subscribeToNotifications();
-    _subscribeToBoards();
   }
 
   @override
@@ -71,9 +73,8 @@ class _BoardScreenState extends State<BoardScreen> {
     searchController.removeListener(_onSearchChanged);
     searchController.dispose();
     _pageController.dispose();
-    _notificationTimer?.cancel();
+    _taskReloadDebounce?.cancel();
     _unsubscribeFromNotifications();
-    _unsubscribeFromBoards();
     _unsubscribeFromTasks();
     super.dispose();
   }
@@ -89,9 +90,11 @@ class _BoardScreenState extends State<BoardScreen> {
       return;
     }
     if (_loadingNotifications) return;
-    setState(() {
-      _loadingNotifications = true;
-    });
+    if (mounted) {
+      setState(() {
+        _loadingNotifications = true;
+      });
+    }
     try {
       final results = await Future.wait([
         _notificationRepository.getUnreadCount(),
@@ -120,11 +123,6 @@ class _BoardScreenState extends State<BoardScreen> {
     await _loadNotificationSetting();
     if (!_inAppNotificationsEnabled) return;
     await _refreshNotifications();
-    _notificationTimer?.cancel();
-    _notificationTimer = Timer.periodic(
-      const Duration(seconds: 20),
-      (_) => _refreshNotifications(),
-    );
   }
 
   Future<void> _loadNotificationSetting() async {
@@ -178,35 +176,6 @@ class _BoardScreenState extends State<BoardScreen> {
     }
   }
 
-  void _subscribeToBoards() {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    if (userId == null) return;
-
-    _boardsChannel = Supabase.instance.client
-        .channel('public:board_members:user_id=eq.$userId')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'board_members',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'user_id',
-            value: userId,
-          ),
-          callback: (payload) {
-            context.read<BoardBloc>().add(LoadBoards());
-          },
-        )
-        .subscribe();
-  }
-
-  void _unsubscribeFromBoards() {
-    if (_boardsChannel != null) {
-      Supabase.instance.client.removeChannel(_boardsChannel!);
-      _boardsChannel = null;
-    }
-  }
-
   void _subscribeToTasks(String boardId) {
     _unsubscribeFromTasks(); // Hủy sub cũ trước khi sub mới
 
@@ -221,20 +190,28 @@ class _BoardScreenState extends State<BoardScreen> {
             column: 'board_id',
             value: boardId,
           ),
-          callback: (payload) {
-            context.read<TaskBloc>().add(
-              LoadTasks(boardId: boardId, query: searchController.text),
-            );
-          },
+          callback: (_) => _scheduleTaskReload(boardId),
         )
         .subscribe();
   }
 
   void _unsubscribeFromTasks() {
+    _taskReloadDebounce?.cancel();
+    _taskReloadDebounce = null;
     if (_tasksChannel != null) {
       Supabase.instance.client.removeChannel(_tasksChannel!);
       _tasksChannel = null;
     }
+  }
+
+  void _scheduleTaskReload(String boardId) {
+    _taskReloadDebounce?.cancel();
+    _taskReloadDebounce = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted || selectedBoardId != boardId) return;
+      context.read<TaskBloc>().add(
+        LoadTasks(boardId: boardId, query: searchController.text),
+      );
+    });
   }
 
   void _showNotificationsDialog() {
@@ -259,30 +236,7 @@ class _BoardScreenState extends State<BoardScreen> {
   }
 
   List<Task> _applyQuickFilter(List<Task> tasks) {
-    if (_quickFilter == 'all') return tasks;
-    if (_quickFilter == 'mine') {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) return [];
-      return tasks
-          .where((t) => t.assigneeIds.contains(userId) || t.creatorId == userId)
-          .toList();
-    }
-    if (_quickFilter == 'overdue') {
-      final now = DateTime.now();
-      return tasks
-          .where(
-            (t) =>
-                t.dueAt != null && t.status != 'done' && t.dueAt!.isBefore(now),
-          )
-          .toList();
-    }
-    return tasks.where((t) => t.status == _quickFilter).toList();
-  }
-
-  bool _isOverdueTask(Task task) {
-    return task.dueAt != null &&
-        task.status != 'done' &&
-        task.dueAt!.isBefore(DateTime.now());
+    return BoardUtils.applyQuickFilter(tasks, _quickFilter);
   }
 
   void _checkOverdueNotifications(List<Task> tasks) {
@@ -291,7 +245,7 @@ class _BoardScreenState extends State<BoardScreen> {
     if (userId == null) return;
 
     for (final task in tasks) {
-      if (_isOverdueTask(task) && !_notifiedOverdueIds.contains(task.id)) {
+      if (BoardUtils.isOverdueTask(task) && !_notifiedOverdueIds.contains(task.id)) {
         // Only notify if user is involved
         if (task.assigneeIds.contains(userId) ||
             (task.assigneeIds.isEmpty && task.creatorId == userId)) {
@@ -313,45 +267,6 @@ class _BoardScreenState extends State<BoardScreen> {
     }
   }
 
-  List<Task> _tasksByStatus(List<Task> allTasks, String status) {
-    if (status == 'overdue') {
-      return allTasks.where(_isOverdueTask).toList();
-    }
-    // Only show in other columns if NOT overdue
-    return allTasks
-        .where((t) => t.status == status && !_isOverdueTask(t))
-        .toList();
-  }
-
-  Color _statusColor(String status) {
-    if (status == 'todo') return Colors.blueAccent;
-    if (status == 'doing') return Colors.orangeAccent;
-    if (status == 'done') return Colors.teal;
-    if (status == 'overdue') return Colors.redAccent;
-    return Colors.blueGrey;
-  }
-
-  bool _isSingleStatusFilter(String value) {
-    return value == 'todo' ||
-        value == 'doing' ||
-        value == 'done' ||
-        value == 'overdue';
-  }
-
-  String _statusTitle(String status) {
-    if (status == 'todo') return AppPreferences.tr('Cần làm', 'To Do');
-    if (status == 'doing') return AppPreferences.tr('Đang làm', 'Doing');
-    if (status == 'done') return AppPreferences.tr('Hoàn thành', 'Completed');
-    if (status == 'overdue') return AppPreferences.tr('Quá hạn', 'Overdue');
-    return status;
-  }
-
-  List<String> _defaultStatuses() => <String>[
-    'todo',
-    'doing',
-    'done',
-    'overdue',
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -657,11 +572,9 @@ class _BoardScreenState extends State<BoardScreen> {
                             Orientation.landscape;
                     final visibleStatuses = _quickFilter == 'mine'
                         ? <String>['todo']
-                        : (_quickFilter == 'all'
-                              ? _defaultStatuses()
-                              : (_isSingleStatusFilter(_quickFilter)
-                                    ? <String>[_quickFilter]
-                                    : _defaultStatuses()));
+                        : (BoardUtils.isSingleStatusFilter(_quickFilter)
+                            ? <String>[_quickFilter]
+                            : BoardUtils.defaultStatuses());
 
                     if (isWideScreen) {
                       return Row(
@@ -674,12 +587,17 @@ class _BoardScreenState extends State<BoardScreen> {
                             child: Column(
                               children: visibleStatuses
                                   .map(
-                                    (status) => _buildMenuItem(
-                                      _statusTitle(status),
-                                      status,
-                                      _statusColor(status),
-                                      visibleTasks,
-                                      currentRole,
+                                    (status) => BoardMenuItem(
+                                      title: BoardUtils.getStatusTitle(status),
+                                      status: status,
+                                      accentColor: BoardUtils.getStatusColor(status),
+                                      allTasks: visibleTasks,
+                                      isSelected: selectedLandscapeStatus == status,
+                                      onTap: (newStatus) {
+                                        setState(() {
+                                          selectedLandscapeStatus = newStatus;
+                                        });
+                                      },
                                     ),
                                   )
                                   .toList(),
@@ -695,11 +613,10 @@ class _BoardScreenState extends State<BoardScreen> {
                             child: Container(
                               color:
                                   Colors.grey[50], // Nền nhạt cho khu vực thẻ
-                              child: _buildLandscapeTaskContent(
-                                context,
-                                visibleTasks,
-                                selectedLandscapeStatus,
-                                currentRole,
+                              child: LandscapeTaskContent(
+                                allTasks: visibleTasks,
+                                status: selectedLandscapeStatus,
+                                role: currentRole,
                               ),
                             ),
                           ),
@@ -713,7 +630,7 @@ class _BoardScreenState extends State<BoardScreen> {
                     // Tự động ẩn cột Quá hạn nếu không có việc và không bị lọc cứng
                     if (_quickFilter != 'overdue' &&
                         portraitStatuses.contains('overdue')) {
-                      final hasOverdue = visibleTasks.any(_isOverdueTask);
+                      final hasOverdue = visibleTasks.any(BoardUtils.isOverdueTask);
                       if (!hasOverdue) {
                         portraitStatuses.remove('overdue');
                       }
@@ -734,26 +651,35 @@ class _BoardScreenState extends State<BoardScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _buildBoardOverview(
-                                visibleTasks,
+                              BoardOverview(
+                                tasks: visibleTasks,
                                 allTasks: state.tasks,
                                 visibleStatuses: portraitStatuses,
                               ),
                               const SizedBox(height: 12),
-                              _buildQuickFilterChips(),
+                              QuickFilterChips(
+                                currentFilter: _quickFilter,
+                                onFilterChanged: (value) {
+                                  setState(() {
+                                    _quickFilter = value;
+                                    if (BoardUtils.isSingleStatusFilter(value)) {
+                                      selectedLandscapeStatus = value;
+                                    }
+                                  });
+                                },
+                              ),
                               const SizedBox(height: 18),
                               for (
                                 var i = 0;
                                 i < portraitStatuses.length;
                                 i++
                               ) ...[
-                                _buildColumn(
-                                  context,
-                                  _statusTitle(portraitStatuses[i]),
-                                  portraitStatuses[i],
-                                  visibleTasks,
-                                  _statusColor(portraitStatuses[i]),
-                                  currentRole,
+                                BoardColumn(
+                                  title: BoardUtils.getStatusTitle(portraitStatuses[i]),
+                                  status: portraitStatuses[i],
+                                  allTasks: visibleTasks,
+                                  accentColor: BoardUtils.getStatusColor(portraitStatuses[i]),
+                                  role: currentRole,
                                 ),
                                 if (i != portraitStatuses.length - 1)
                                   const SizedBox(height: 24),
@@ -824,546 +750,6 @@ class _BoardScreenState extends State<BoardScreen> {
           );
         },
       ),
-    );
-  }
-
-  Widget _buildQuickFilterChips() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _filterChip('all', AppPreferences.tr('Tất cả', 'All')),
-          const SizedBox(width: 8),
-          _filterChip('mine', AppPreferences.tr('Việc của tôi', 'My tasks')),
-          const SizedBox(width: 8),
-          _filterChip('overdue', AppPreferences.tr('Quá hạn', 'Overdue')),
-          const SizedBox(width: 8),
-          _filterChip('doing', AppPreferences.tr('Đang làm', 'Doing')),
-          const SizedBox(width: 8),
-          _filterChip('done', AppPreferences.tr('Hoàn thành', 'Completed')),
-        ],
-      ),
-    );
-  }
-
-  Widget _filterChip(String value, String label) {
-    final selected = _quickFilter == value;
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => setState(() {
-        _quickFilter = value;
-        if (_isSingleStatusFilter(value)) {
-          selectedLandscapeStatus = value;
-        }
-      }),
-      selectedColor: Colors.blueAccent.withOpacity(0.16),
-      labelStyle: TextStyle(
-        color: selected ? Colors.blueAccent : Colors.black87,
-        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-      ),
-    );
-  }
-
-  Widget _buildBoardOverview(
-    List<Task> tasks, {
-    required List<Task> allTasks,
-    required List<String> visibleStatuses,
-  }) {
-    final showDone = visibleStatuses.contains('done');
-    final showDoing = visibleStatuses.contains('doing');
-    final showTodo = visibleStatuses.contains('todo');
-    final showOverdue = visibleStatuses.contains('overdue');
-
-    final overdue = showOverdue ? tasks.where(_isOverdueTask).length : 0;
-    final done = showDone ? tasks.where((t) => t.status == 'done').length : 0;
-    // Strictly exclude overdue from todo and doing to avoid double counting
-    final doing = showDoing
-        ? tasks.where((t) => t.status == 'doing' && !_isOverdueTask(t)).length
-        : 0;
-    final todo = showTodo
-        ? tasks.where((t) => t.status == 'todo' && !_isOverdueTask(t)).length
-        : 0;
-
-    // Contextual global counts for the board
-    final boardTotal = allTasks.length;
-
-    // Total tasks used for progress calculation (from active columns)
-    final activeTotal = done + doing + todo + overdue;
-    final progress = activeTotal == 0 ? 0.0 : done / activeTotal;
-    final percentText = '${(progress * 100).round()}%';
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 96,
-            height: 96,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                CircularProgressIndicator(
-                  value: progress,
-                  strokeWidth: 9,
-                  strokeCap: StrokeCap.round,
-                  backgroundColor: const Color(0xFFE2E8F0),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFF2563EB),
-                  ),
-                ),
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white,
-                  ),
-                ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      percentText,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 24,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      AppPreferences.tr('Tiến độ', 'Progress'),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _miniStat(
-                  AppPreferences.tr('Toàn dự án', 'Project'),
-                  boardTotal,
-                  const Color(0xFF334155),
-                ),
-                _miniStat(
-                  AppPreferences.tr('Cần làm', 'To Do'),
-                  todo,
-                  Colors.blueAccent,
-                ),
-                _miniStat(
-                  AppPreferences.tr('Đang làm', 'Doing'),
-                  doing,
-                  Colors.orangeAccent,
-                ),
-                _miniStat(
-                  AppPreferences.tr('Hoàn thành', 'Done'),
-                  done,
-                  Colors.teal,
-                ),
-                _miniStat(
-                  AppPreferences.tr('Quá hạn', 'Overdue'),
-                  overdue,
-                  Colors.redAccent,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _miniStat(String label, int value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        '$label: $value',
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMenuItem(
-    String title,
-    String status,
-    Color accentColor,
-    List<Task> allTasks,
-    String? role,
-  ) {
-    final isSelected = selectedLandscapeStatus == status;
-    final tasksCount = _tasksByStatus(allTasks, status).length;
-
-    return DragTarget<Task>(
-      onWillAcceptWithDetails: (details) =>
-          status != 'overdue' && details.data.status != status,
-      onAcceptWithDetails: (details) {
-        if (status == 'overdue') return;
-        final droppedTask = details.data;
-        final updatedTask = Task(
-          id: droppedTask.id,
-          boardId: droppedTask.boardId,
-          title: droppedTask.title,
-          description: droppedTask.description,
-          status: status == 'overdue' ? droppedTask.status : status,
-          assigneeIds: droppedTask.assigneeIds,
-          creatorId: droppedTask.creatorId,
-          dueAt: droppedTask.dueAt,
-          createdAt: droppedTask.createdAt,
-          checklist: droppedTask.checklist,
-          hasAttachments: droppedTask.hasAttachments,
-        );
-        context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isHovering = candidateData.isNotEmpty;
-
-        return InkWell(
-          onTap: () {
-            setState(() {
-              selectedLandscapeStatus = status;
-            });
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-            decoration: BoxDecoration(
-              color: isHovering
-                  ? accentColor.withOpacity(0.2)
-                  : (isSelected
-                        ? accentColor.withOpacity(0.1)
-                        : Colors.transparent),
-              border: Border(
-                left: BorderSide(
-                  color: isHovering || isSelected
-                      ? accentColor
-                      : Colors.transparent,
-                  width: 4,
-                ),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: accentColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontWeight: isHovering || isSelected
-                          ? FontWeight.bold
-                          : FontWeight.w500,
-                      fontSize: 16,
-                      color: isHovering || isSelected
-                          ? accentColor
-                          : Colors.black87,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: accentColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '$tasksCount',
-                    style: TextStyle(
-                      color: accentColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildLandscapeTaskContent(
-    BuildContext context,
-    List<Task> allTasks,
-    String status,
-    String? role,
-  ) {
-    final tasks = _tasksByStatus(allTasks, status);
-    final accentColor = _statusColor(status);
-
-    return DragTarget<Task>(
-      onWillAcceptWithDetails: (details) =>
-          status != 'overdue' && details.data.status != status,
-      onAcceptWithDetails: (details) {
-        if (status == 'overdue') return;
-        final droppedTask = details.data;
-        final updatedTask = Task(
-          id: droppedTask.id,
-          boardId: droppedTask.boardId,
-          title: droppedTask.title,
-          description: droppedTask.description,
-          status: status == 'overdue' ? droppedTask.status : status,
-          assigneeIds: droppedTask.assigneeIds,
-          creatorId: droppedTask.creatorId,
-          dueAt: droppedTask.dueAt,
-          createdAt: droppedTask.createdAt,
-        );
-        context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isHovering = candidateData.isNotEmpty;
-
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          color: isHovering
-              ? accentColor.withOpacity(0.05)
-              : Colors.transparent,
-          child: tasks.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.inbox_outlined,
-                        size: 60,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Chưa có công việc nào',
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 16,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : GridView.builder(
-                  padding: const EdgeInsets.all(24),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 400,
-                    mainAxisExtent: 140, // Fixed height for task cards
-                    crossAxisSpacing: 20,
-                    mainAxisSpacing: 20,
-                  ),
-                  itemCount: tasks.length,
-                  itemBuilder: (context, index) {
-                    final task = tasks[index];
-                    if (role == 'viewer') {
-                      return TaskCard(task: task, accentColor: accentColor);
-                    }
-                    return Draggable<Task>(
-                      data: task,
-                      feedback: Material(
-                        elevation: 8,
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.transparent,
-                        child: SizedBox(
-                          width: 380,
-                          child: Opacity(
-                            opacity: 0.9,
-                            child: TaskCard(
-                              task: task,
-                              accentColor: accentColor,
-                            ),
-                          ),
-                        ),
-                      ),
-                      childWhenDragging: Opacity(
-                        opacity: 0.3,
-                        child: TaskCard(task: task, accentColor: accentColor),
-                      ),
-                      child: TaskCard(task: task, accentColor: accentColor),
-                    );
-                  },
-                ),
-        );
-      },
-    );
-  }
-
-  Widget _buildColumn(
-    BuildContext context,
-    String title,
-    String status,
-    List<Task> allTasks,
-    Color accentColor,
-    String? role,
-  ) {
-    final tasks = _tasksByStatus(allTasks, status);
-
-    return DragTarget<Task>(
-      onWillAcceptWithDetails: (details) =>
-          status != 'overdue' && details.data.status != status,
-      onAcceptWithDetails: (details) {
-        if (status == 'overdue') return;
-        final droppedTask = details.data;
-        final updatedTask = Task(
-          id: droppedTask.id,
-          boardId: droppedTask.boardId,
-          title: droppedTask.title,
-          description: droppedTask.description,
-          status: status == 'overdue' ? droppedTask.status : status,
-          assigneeIds: droppedTask.assigneeIds,
-          creatorId: droppedTask.creatorId,
-          dueAt: droppedTask.dueAt,
-          createdAt: droppedTask.createdAt,
-        );
-        context.read<TaskBloc>().add(UpdateTaskEvent(updatedTask));
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isHovering = candidateData.isNotEmpty;
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isHovering
-                  ? accentColor.withOpacity(0.8)
-                  : Colors.grey.withOpacity(0.2),
-              width: isHovering ? 2 : 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isHovering
-                    ? accentColor.withOpacity(0.15)
-                    : Colors.black.withOpacity(0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              dividerColor: Colors.transparent,
-              colorScheme: ColorScheme.light(primary: accentColor),
-            ),
-            child: ExpansionTile(
-              key: PageStorageKey('$status-${tasks.isNotEmpty}'),
-              initiallyExpanded: tasks.isNotEmpty,
-              tilePadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 4,
-              ),
-              title: Row(
-                children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: accentColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-              trailing: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: accentColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${tasks.length}',
-                  style: TextStyle(
-                    color: accentColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              children: tasks.map((task) {
-                if (role == 'viewer') {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: TaskCard(task: task, accentColor: accentColor),
-                  );
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Draggable<Task>(
-                    data: task,
-                    feedback: Material(
-                      elevation: 8,
-                      borderRadius: BorderRadius.circular(12),
-                      color: Colors.transparent,
-                      child: SizedBox(
-                        width: MediaQuery.of(context).size.width - 64,
-                        child: Opacity(
-                          opacity: 0.9,
-                          child: TaskCard(task: task, accentColor: accentColor),
-                        ),
-                      ),
-                    ),
-                    childWhenDragging: Opacity(
-                      opacity: 0.4,
-                      child: TaskCard(task: task, accentColor: accentColor),
-                    ),
-                    child: TaskCard(task: task, accentColor: accentColor),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        );
-      },
     );
   }
 

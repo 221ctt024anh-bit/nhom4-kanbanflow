@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/usecases/task_usecases.dart';
 import 'task_event.dart';
@@ -54,12 +55,12 @@ class TaskBloc extends Bloc<TaskEvent, TaskState> {
   }
 
   Future<void> _onAddTask(AddTaskEvent event, Emitter<TaskState> emit) async {
+    debugPrint('DEBUG: TaskBloc._onAddTask - Title: ${event.task.title}');
     try {
       await addTask.call(event.task);
-      add(
-        LoadTasks(),
-      ); // Thêm xong thì tự động gọi sự kiện LoadTasks để làm mới bảng
+      add(LoadTasks()); // Thêm xong thì tự động gọi sự kiện LoadTasks để làm mới bảng
     } catch (e) {
+      debugPrint('DEBUG: TaskBloc._onAddTask - Error: $e');
       emit(TaskError(e.toString()));
     }
   }
@@ -80,10 +81,13 @@ class TaskBloc extends Bloc<TaskEvent, TaskState> {
     DeleteTaskEvent event,
     Emitter<TaskState> emit,
   ) async {
+    debugPrint('DEBUG: TaskBloc._onDeleteTask - ID: ${event.id}');
     try {
       await deleteTask.call(event.id);
+      debugPrint('DEBUG: TaskBloc._onDeleteTask - Success, calling LoadTasks');
       add(LoadTasks());
     } catch (e) {
+      debugPrint('DEBUG: TaskBloc._onDeleteTask - Error: $e');
       emit(TaskError(e.toString()));
     }
   }

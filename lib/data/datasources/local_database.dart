@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
@@ -298,5 +299,20 @@ class LocalDatabase {
   Future<int> removePendingOperation(int id) async {
     final db = await database;
     return db.delete('pending_ops', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> clearPendingOperationsByEntityId(
+    String entity,
+    String entityId,
+  ) async {
+    final ops = await getPendingOperations(entity);
+    for (final op in ops) {
+      try {
+        final payload = jsonDecode(op.payload) as Map<String, dynamic>;
+        if (payload['id'] == entityId) {
+          await removePendingOperation(op.id);
+        }
+      } catch (_) {}
+    }
   }
 }

@@ -12,6 +12,7 @@ class TaskAttachments extends StatelessWidget {
   final VoidCallback onPickAndUpload;
   final Function(TaskAttachment) onOpen;
   final Function(TaskAttachment) onDelete;
+  final Function(TaskAttachment) onDownload;
 
   const TaskAttachments({
     super.key,
@@ -22,6 +23,7 @@ class TaskAttachments extends StatelessWidget {
     required this.onPickAndUpload,
     required this.onOpen,
     required this.onDelete,
+    required this.onDownload,
   });
 
   @override
@@ -33,16 +35,33 @@ class TaskAttachments extends StatelessWidget {
           AppPreferences.tr('TỆP ĐÍNH KÈM', 'ATTACHMENTS'),
           trailing: role == 'viewer'
               ? const SizedBox.shrink()
-              : TextButton.icon(
-                  onPressed: uploading ? null : onPickAndUpload,
-                  icon: uploading
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.add_circle_outline, size: 16),
-                  label: Text(AppPreferences.tr('Thêm tệp', 'Add file')),
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton.icon(
+                      onPressed: uploading ? null : onPickAndUpload,
+                      icon: uploading
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.add_photo_alternate_outlined, size: 16),
+                      label: Text(AppPreferences.tr('Thêm ảnh', 'Add image')),
+                    ),
+                    const SizedBox(width: 4),
+                    TextButton.icon(
+                      onPressed: uploading ? null : onPickAndUpload,
+                      icon: uploading
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.file_present_outlined, size: 16),
+                      label: Text(AppPreferences.tr('Thêm tệp', 'Add file')),
+                    ),
+                  ],
                 ),
         ),
         const SizedBox(height: 12),
@@ -50,32 +69,65 @@ class TaskAttachments extends StatelessWidget {
           const Center(
             child: Padding(
               padding: EdgeInsets.all(16),
-              child: CircularProgressIndicator(),
             ),
           )
         else if (attachments.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+          InkWell(
+            onTap: role == 'viewer' ? null : onPickAndUpload,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFFE2E8F0),
+                  width: 1.5,
+                  style: BorderStyle.solid,
                 ),
-              ],
-            ),
-            child: Center(
-              child: Text(
-                AppPreferences.tr('Chưa có tệp đính kèm', 'No attachments yet'),
-                style: const TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontStyle: FontStyle.italic,
-                  fontSize: 14,
-                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF1F5F9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.cloud_upload_outlined,
+                      size: 32,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    AppPreferences.tr('Kéo thả hoặc nhấn để gửi tệp', 'Tap to upload files or photos'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFF475569),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    AppPreferences.tr('Hỗ trợ: PDF, Tài liệu, Hình ảnh...', 'Supports: PDF, Docs, Images...'),
+                    style: const TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ),
           )
@@ -178,14 +230,23 @@ class TaskAttachments extends StatelessWidget {
                                 constraints: const BoxConstraints(),
                                 padding: EdgeInsets.zero,
                                 icon: const Icon(
-                                  Icons.delete_outline,
+                                  Icons.download_rounded,
                                   color: Colors.white,
                                   size: 16,
                                 ),
-                                onPressed: role == 'viewer'
-                                    ? null
-                                    : () => onDelete(item),
+                                onPressed: () => onDownload(item),
                               ),
+                              if (role != 'viewer')
+                                IconButton(
+                                  constraints: const BoxConstraints(),
+                                  padding: EdgeInsets.zero,
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                  onPressed: () => onDelete(item),
+                                ),
                             ],
                           ),
                         ),
@@ -205,12 +266,14 @@ class PriorityPreview extends StatelessWidget {
   final List<TaskAttachment> attachments;
   final bool loading;
   final Function(TaskAttachment) onOpen;
+  final Function(TaskAttachment) onDownload;
 
   const PriorityPreview({
     super.key,
     required this.attachments,
     required this.loading,
     required this.onOpen,
+    required this.onDownload,
   });
 
   @override
@@ -258,13 +321,29 @@ class PriorityPreview extends StatelessWidget {
             Positioned(
               bottom: 16,
               right: 16,
-              child: FloatingActionButton.small(
-                onPressed: () => onOpen(image),
-                backgroundColor: Colors.white,
-                child: const Icon(
-                  Icons.fullscreen_rounded,
-                  color: Colors.blueAccent,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FloatingActionButton.small(
+                    onPressed: () => onDownload(image),
+                    backgroundColor: Colors.white,
+                    heroTag: 'download_priority',
+                    child: const Icon(
+                      Icons.download_rounded,
+                      color: Colors.blueAccent,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FloatingActionButton.small(
+                    onPressed: () => onOpen(image),
+                    backgroundColor: Colors.white,
+                    heroTag: 'fullscreen_priority',
+                    child: const Icon(
+                      Icons.fullscreen_rounded,
+                      color: Colors.blueAccent,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

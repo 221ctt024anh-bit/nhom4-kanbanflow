@@ -116,4 +116,20 @@ class UserSettingsRepository {
       rethrow;
     }
   }
+
+  Future<void> updateProfile({
+    required String userId,
+    String? displayName,
+    String? bio,
+    String? avatarUrl,
+  }) async {
+    final updates = <String, dynamic>{};
+    if (displayName != null) updates['display_name'] = displayName;
+    if (bio != null) updates['bio'] = bio;
+    if (avatarUrl != null) updates['avatar_url'] = avatarUrl;
+
+    if (updates.isEmpty) return;
+
+    await _client.from('profiles').update(updates).eq('id', userId);
+  }
 }

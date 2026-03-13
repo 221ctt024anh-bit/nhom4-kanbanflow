@@ -1,21 +1,23 @@
+import 'dart:typed_data';
+
+import 'package:mime/mime.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../domain/entities/direct_message.dart';
-import 'notification_repository.dart';
 
 class ChatRepository {
+  static const String chatImagesBucket = 'chat-images';
+
   final SupabaseClient _client;
-  final NotificationRepository? _notificationRepository;
 
   ChatRepository({
     SupabaseClient? client,
-    NotificationRepository? notificationRepository,
-  }) : _client = client ?? Supabase.instance.client,
-       _notificationRepository = notificationRepository;
+  }) : _client = client ?? Supabase.instance.client;
 
   String _requireUserId() {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) {
-      throw Exception('Bạn cần đăng nhập để dùng chat.');
+      throw Exception('Ban can dang nhap de dung chat.');
     }
     return userId;
   }
@@ -62,38 +64,12 @@ class ChatRepository {
     final cleaned = content.trim();
     if (cleaned.isEmpty) return;
 
-    await _client.from('direct_messages').insert({
-      'conversation_id': buildConversationId(currentUserId, friendId),
-      'sender_id': currentUserId,
-      'recipient_id': friendId,
-      'content': cleaned,
-      'message_type': 'text',
-    });
-
-    // Tạo thông báo cho người nhận
-    if (_notificationRepository != null) {
-      try {
-        // Lấy tên người gửi
-        final senderProfile = await _client
-            .from('profiles')
-            .select('display_name, email')
-            .eq('id', currentUserId)
-            .maybeSingle();
-
-        final senderName =
-            senderProfile?['display_name'] ??
-            (senderProfile?['email'] as String?)?.split('@').first ??
-            'Ai đó';
-
-        await _notificationRepository.createNotification(
-          userId: friendId,
-          title: 'Tin nhắn mới',
-          message: '$senderName: $cleaned',
-        );
-      } catch (_) {
-        // Không block việc gửi tin nhắn nếu tạo thông báo lỗi
-      }
-    }
+    await _insertDirectMessage(
+      friendId: friendId,
+      senderId: currentUserId,
+      content: cleaned,
+      messageType: 'text',
+    );
   }
 
   Future<void> markConversationRead(String friendId) async {
@@ -107,40 +83,70 @@ class ChatRepository {
         .eq('is_read', false);
   }
 
+  Future<String> uploadChatImage({
+    required String friendId,
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    final currentUserId = _requireUserId();
+    final conversationId = buildConversationId(currentUserId, friendId);
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final safeName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final filePath = '$conversationId/${timestamp}_$safeName';
+    final contentType = lookupMimeType(fileName) ?? 'image/jpeg';
+
+    await _client.storage.from(chatImagesBucket).uploadBinary(
+      filePath,
+      bytes,
+      fileOptions: FileOptions(
+        contentType: contentType,
+        cacheControl: '3600',
+        upsert: false,
+      ),
+    );
+
+    return _client.storage.from(chatImagesBucket).getPublicUrl(filePath);
+  }
+
   Future<void> sendImageMessage({
     required String friendId,
     required String imageUrl,
   }) async {
     final currentUserId = _requireUserId();
+    await _insertDirectMessage(
+      friendId: friendId,
+      senderId: currentUserId,
+      content: imageUrl,
+      messageType: 'image',
+    );
+  }
 
-    await _client.from('direct_messages').insert({
-      'conversation_id': buildConversationId(currentUserId, friendId),
-      'sender_id': currentUserId,
+  Future<void> _insertDirectMessage({
+    required String friendId,
+    required String senderId,
+    required String content,
+    required String messageType,
+  }) async {
+    final payload = {
+      'conversation_id': buildConversationId(senderId, friendId),
+      'sender_id': senderId,
       'recipient_id': friendId,
-      'content': imageUrl,
-      'message_type': 'image',
-    });
+      'content': content,
+      'message_type': messageType,
+    };
 
-    // Tạo thông báo cho người nhận
-    if (_notificationRepository != null) {
-      try {
-        final senderProfile = await _client
-            .from('profiles')
-            .select('display_name, email')
-            .eq('id', currentUserId)
-            .maybeSingle();
-
-        final senderName =
-            senderProfile?['display_name'] ??
-            (senderProfile?['email'] as String?)?.split('@').first ??
-            'Ai đó';
-
-        await _notificationRepository.createNotification(
-          userId: friendId,
-          title: 'Tin nhắn mới',
-          message: '$senderName đã gửi một hình ảnh',
-        );
-      } catch (_) {}
+    try {
+      await _client.from('direct_messages').insert(payload);
+    } on PostgrestException catch (error) {
+      // Backward-compatible fallback if the server has not added message_type yet.
+      if (error.code == 'PGRST204' &&
+          error.message.contains('message_type column')) {
+        final fallbackPayload = Map<String, dynamic>.from(payload)
+          ..remove('message_type');
+        await _client.from('direct_messages').insert(fallbackPayload);
+        return;
+      }
+      rethrow;
     }
   }
 }

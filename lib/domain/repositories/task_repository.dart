@@ -6,4 +6,5 @@ abstract class TaskRepository {
   Future<void> updateTask(Task task);
   Future<void> deleteTask(String id);
   Future<Task?> getTaskById(String id);
+  Future<void> syncPendingTasks();
 }

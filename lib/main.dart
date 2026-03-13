@@ -29,6 +29,7 @@ import 'presentation/screens/my_profile_screen.dart';
 import 'presentation/screens/reset_password_screen.dart';
 import 'presentation/screens/settings_screen.dart';
 import 'presentation/screens/web_task_view_screen.dart';
+import 'presentation/screens/my_tasks_screen.dart';
 import 'data/repositories/friend_repository.dart';
 
 Future<void> main() async {
@@ -222,33 +223,41 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         },
         child: ValueListenableBuilder<AppPreferencesState>(
           valueListenable: AppPreferences.notifier,
-          builder: (context, prefs, _) {
-            return MaterialApp(
-              navigatorKey: _navigatorKey,
-              title: 'TaskMate',
-              debugShowCheckedModeBanner: false,
-              locale: prefs.locale,
-              supportedLocales: const [Locale('vi'), Locale('en')],
-              localizationsDelegates: const [
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
-              themeMode: prefs.themeMode,
-              theme: _lightTheme,
-              darkTheme: _darkTheme,
-              routes: {
-                '/reset-password': (_) => const ResetPasswordScreen(),
-                '/settings': (_) => const SettingsScreen(),
-                '/profile': (_) => const MyProfileScreen(),
-                '/friends': (_) => const FriendsScreen(),
-              },
-              onGenerateRoute: (settings) {
-                if (settings.name?.startsWith('/task/') ?? false) {
-                  final taskId = settings.name!.replaceFirst('/task/', '');
-                  return MaterialPageRoute(
-                    builder: (context) => WebTaskViewScreen(taskId: taskId),
-                  );
+          builder: (context, prefs, _) => MaterialApp(
+            navigatorKey: _navigatorKey,
+            title: 'TaskMate',
+            debugShowCheckedModeBanner: false,
+            routes: {
+              '/reset-password': (_) => const ResetPasswordScreen(),
+              '/settings': (_) => const SettingsScreen(),
+              '/profile': (_) => const MyProfileScreen(),
+              '/friends': (_) => const FriendsScreen(),
+              '/my-tasks': (_) => const MyTasksScreen(),
+            },
+            locale: prefs.locale,
+            supportedLocales: const [Locale('vi'), Locale('en')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            themeMode: prefs.themeMode,
+            theme: _lightTheme,
+            darkTheme: _darkTheme,
+            onGenerateRoute: (settings) {
+              if (settings.name != null && settings.name!.startsWith('/task/')) {
+                final taskId = settings.name!.replaceFirst('/task/', '');
+                return MaterialPageRoute(
+                  builder: (context) => WebTaskViewScreen(taskId: taskId),
+                );
+              }
+              return null;
+            },
+            home: BlocBuilder<AuthBloc, AuthState>(
+              builder: (context, state) {
+                if (state is Authenticated) {
+                  unawaited(_syncAppPreferences());
+                  return const BoardScreen();
                 }
                 return null;
               },

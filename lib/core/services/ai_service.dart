@@ -5,10 +5,12 @@ class AiService {
   late final GenerativeModel _model;
 
   AiService() {
-    _model = GenerativeModel(
-      model: AiConstants.modelName,
-      apiKey: AiConstants.geminiApiKey,
+    final key = AiConstants.geminiApiKey.trim();
+    // ignore: avoid_print
+    print(
+      'DEBUG: AiService initialized. Key length: ${key.length}. Masked: ${key.substring(0, 5)}...${key.substring(key.length - 4)}',
     );
+    _model = GenerativeModel(model: AiConstants.modelName, apiKey: key);
   }
 
   /// Làm sạch và tối ưu hóa văn bản mô tả công việc
@@ -23,11 +25,16 @@ class AiService {
         ? 'Có danh sách các công việc con như sau: ${checklistItems.join(", ")}'
         : '';
 
-    final prompt = '''
+    final prompt =
+        '''
 Bạn là một trợ lý quản lý dự án chuyên nghiệp. 
 Hãy viết lại đoạn mô tả công việc cho task: "$title".
 $checklistContext
 Dựa trên các thông tin trên, hãy tối ưu hóa nội dung mô tả dưới đây để nó trở nên chuyên nghiệp, rõ ràng và súc tích hơn. 
+**YÊU CẦU QUAN TRỌNG:** 
+- Trình bày rõ ràng, đi thẳng vào vấn đề. 
+- Không viết lời dẫn rườm rà (ví dụ: "Chào bạn...", "Dưới đây là phương án...").
+- Sử dụng định dạng Markdown hiệu quả.
 Giữ nguyên ý nghĩa gốc và ngôn ngữ gốc (Tiếng Việt).
 
 Nội dung mô tả cần viết lại:

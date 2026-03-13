@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -153,28 +153,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _saving = true);
     try {
-      String? displayNameError;
-      try {
-        await _repo.updateDisplayName(
-          userId: _userId!,
-          displayName: displayName,
-        );
-        await _repo.updateBio(userId: _userId!, bio: bio);
-      } catch (e) {
-        displayNameError = e.toString();
-      }
-
+      String? newAvatarUrl;
       if (_pendingAvatarBytes != null && _pendingAvatarExtension != null) {
-        final avatarUrl = await _repo.uploadAvatar(
+        newAvatarUrl = await _repo.uploadAvatar(
           userId: _userId!,
           bytes: _pendingAvatarBytes!,
           fileExtension: _pendingAvatarExtension!,
         );
-        await _repo.updateAvatarUrl(userId: _userId!, avatarUrl: avatarUrl);
-        _avatarUrl = avatarUrl;
+        _avatarUrl = newAvatarUrl;
         _pendingAvatarBytes = null;
         _pendingAvatarExtension = null;
       }
+
+      await _repo.updateProfile(
+        userId: _userId!,
+        displayName: displayName,
+        bio: bio,
+        avatarUrl: newAvatarUrl,
+      );
 
       await _repo.updateSettings(
         userId: _userId!,
@@ -185,16 +181,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       AppPreferences.apply(themeMode: _themeMode, languageCode: _languageCode);
 
-      if (displayNameError == null) {
-        _showSnack(_t('Đã lưu cài đặt', 'Settings saved'));
-      } else {
-        _showSnack(
-          _t(
-            'Đã lưu cài đặt, nhưng chưa cập nhật được tên hiển thị',
-            'Settings saved, but could not update display name',
-          ),
-        );
-      }
+      _showSnack(_t('Đã lưu tất cả thay đổi', 'All changes saved'));
     } catch (e) {
       final message = e is PostgrestException
           ? (e.message.isNotEmpty ? e.message : e.toString())

@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:mime/mime.dart';
@@ -318,6 +320,56 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     }
   }
 
+  Future<void> _downloadAttachment(TaskAttachment attachment) async {
+    // Show loading snackbar
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '${AppPreferences.tr('Đang tải:', 'Downloading:')} ${attachment.fileName}',
+              ),
+            ),
+          ],
+        ),
+        duration: const Duration(seconds: 10), // Will be hidden manually
+      ),
+    );
+
+    try {
+      // 1. Fetch bytes from repository
+      final bytes = await _repo.downloadAttachment(attachment.filePath);
+
+      // 2. Save to temporary file
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/${attachment.fileName}');
+      await tempFile.writeAsBytes(bytes);
+
+      // Hide loading snackbar
+      if (mounted) ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      // 3. Share the file (this provides "Save to Files", "Save Image" etc. on mobile)
+      await Share.shareXFiles(
+        [XFile(tempFile.path)],
+        text: attachment.fileName,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        _showSnack(
+          '${AppPreferences.tr('Tải tệp thất bại:', 'Download failed:')} $e',
+        );
+      }
+    }
+  }
+
   Future<void> _deleteAttachment(TaskAttachment attachment) async {
     try {
       await _repo.deleteAttachment(attachment);
@@ -565,6 +617,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
               attachments: _attachments,
               loading: _loadingAttachments,
               onOpen: _openAttachment,
+              onDownload: _downloadAttachment,
             ),
             Padding(
               padding: const EdgeInsets.all(20),
@@ -613,6 +666,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                     onPickAndUpload: _pickAndUploadAttachment,
                     onOpen: _openAttachment,
                     onDelete: _deleteAttachment,
+                    onDownload: _downloadAttachment,
                   ),
                   const SizedBox(height: 24),
                   TaskDescription(
@@ -838,7 +892,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
 
   void _showShareTaskDialog() {
     // URL for the deployed web app on Netlify
-    const baseUrl = "https://capable-gelato-8b83e8.netlify.app/task/";
+    const baseUrl = "https://precious-sopapillas-b5a339.netlify.app/task/";
     final taskUrl = "$baseUrl${_currentTask.id}";
 
     showDialog(

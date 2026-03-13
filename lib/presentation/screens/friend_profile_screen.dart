@@ -22,8 +22,10 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
   bool _loadingStats = true;
   int _ownedBoards = 0;
   int _joinedBoards = 0;
+  int _createdTasks = 0;
   int _assignedTasks = 0;
   int _doneTasks = 0;
+  int _totalRelevantTasks = 0;
   int _friendCount = 0;
 
   @override
@@ -79,100 +81,55 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
     final userId = widget.friend.id;
 
     try {
-      int ownedBoards = 0;
-      int joinedBoards = 0;
-      int assignedTasks = 0;
-      int doneTasks = 0;
-      int friendCount = 0;
+      final results = await Future.wait([
+        _client.from('boards').select('id').eq('owner_id', userId),
+        _client.from('board_members').select('board_id').eq('user_id', userId),
+        _client.from('tasks').select('id, status').eq('creator_id', userId),
+        _client.from('task_assignees').select('task_id, tasks(id, status, creator_id)').eq('user_id', userId),
+        _client.from('friendships').select('user_id, friend_id').or('user_id.eq.$userId,friend_id.eq.$userId'),
+      ]);
 
-      try {
-        final ownedBoardsResponse = await _client
-            .from('boards')
-            .select('id')
-            .eq('owner_id', userId);
-        ownedBoards = (ownedBoardsResponse as List).length;
-      } catch (_) {}
+      final owned = results[0] as List;
+      final joined = results[1] as List;
+      final created = (results[2] as List).map((e) => e as Map<String, dynamic>);
+      final assignedJoin = (results[3] as List).map((e) => e as Map<String, dynamic>);
+      final friends = results[4] as List;
 
-      try {
-        final joinedBoardsResponse = await _client
-            .from('board_members')
-            .select('board_id')
-            .eq('user_id', userId);
-        joinedBoards = (joinedBoardsResponse as List).length;
-      } catch (_) {}
+      final allTasks = <String, String>{}; // Map<Id, Status>
+      for (final t in created) {
+        allTasks[t['id'].toString()] = t['status'].toString();
+      }
 
-      try {
-        // Query tasks assigned via join table using inner join filter
-        final assignedResponse = await _client
-            .from('tasks')
-            .select('id, status, task_assignees!inner(user_id)')
-            .eq('task_assignees.user_id', userId);
-        final assigned = (assignedResponse as List).map(
-          (e) => e as Map<String, dynamic>,
-        );
-
-        // Query tasks created by user
-        final createdResponse = await _client
-            .from('tasks')
-            .select('id, status')
-            .eq('creator_id', userId);
-        final created = (createdResponse as List).map(
-          (e) => e as Map<String, dynamic>,
-        );
-
-        // Combine unique tasks
-        final allTasks = <String, Map<String, dynamic>>{};
-        for (final t in assigned) allTasks[t['id'] as String] = t;
-        for (final t in created) allTasks[t['id'] as String] = t;
-
-        final tasksList = allTasks.values.toList();
-        assignedTasks = tasksList.length;
-        doneTasks = tasksList.where((t) => t['status'] == 'done').length;
-      } catch (_) {}
-
-      try {
-        // Đếm số lượng bạn bè (tìm cả 2 chiều để chắc chắn không sót)
-        final friendResponse = await _client
-            .from('friendships')
-            .select('user_id')
-            .or('user_id.eq.$userId,friend_id.eq.$userId');
-
-        // Vì lưu 2 chiều nên 1 người bạn sẽ có 2 dòng (A-B và B-A) trong kết quả nếu tìm cả 2 chiều
-        // Nhưng nếu tìm theo userId thì chỉ cần lấy Unique Ids khác với chính mình
-        final rows = friendResponse as List;
-        final friendsSet = <String>{};
-        for (final row in rows) {
-          final map = row as Map<String, dynamic>;
-          if (map['user_id'] != userId) friendsSet.add(map['user_id']);
-          // Thêm logic handle nếu select friend_id
+      int assignedFromOthers = 0;
+      for (final a in assignedJoin) {
+        final task = a['tasks'] as Map<String, dynamic>?;
+        if (task != null) {
+          allTasks[task['id'].toString()] = task['status'].toString();
+          if (task['creator_id'] != userId) {
+            assignedFromOthers++;
+          }
         }
-        // Cách đơn giản nhất với schema mới (2 dòng):
-        // Chỉ cần tìm eq('user_id', userId) là ra đủ.
-        // Nhưng để handle data cũ (1 dòng), ta lấy distinct list of (user_id, friend_id) excluding userId
+      }
 
-        final friendResponse2 = await _client
-            .from('friendships')
-            .select('user_id, friend_id')
-            .or('user_id.eq.$userId,friend_id.eq.$userId');
-
-        final allRelated = friendResponse2 as List;
-        final uniqueFriends = <String>{};
-        for (final item in allRelated) {
-          final m = item as Map<String, dynamic>;
-          if (m['user_id'] != userId) uniqueFriends.add(m['user_id']);
-          if (m['friend_id'] != userId) uniqueFriends.add(m['friend_id']);
-        }
-        friendCount = uniqueFriends.length;
-      } catch (_) {}
+      final uniqueFriends = <String>{};
+      for (final item in friends) {
+        final m = item as Map<String, dynamic>;
+        if (m['user_id'] != userId) uniqueFriends.add(m['user_id']);
+        if (m['friend_id'] != userId) uniqueFriends.add(m['friend_id']);
+      }
 
       if (!mounted) return;
       setState(() {
-        _ownedBoards = ownedBoards;
-        _joinedBoards = joinedBoards;
-        _assignedTasks = assignedTasks;
-        _doneTasks = doneTasks;
-        _friendCount = friendCount;
+        _ownedBoards = owned.length;
+        _joinedBoards = joined.length > _ownedBoards ? joined.length - _ownedBoards : 0;
+        _createdTasks = created.length;
+        _assignedTasks = assignedFromOthers;
+        _doneTasks = allTasks.values.where((s) => s == 'done').length;
+        _totalRelevantTasks = allTasks.length;
+        _friendCount = uniqueFriends.length;
       });
+    } catch (e) {
+      debugPrint('Error loading friend stats: $e');
     } finally {
       if (mounted) {
         setState(() => _loadingStats = false);
@@ -410,9 +367,13 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.3,
               children: [
                 _statCard(
                   AppPreferences.tr('Bảng sở hữu', 'Owned boards'),
@@ -423,6 +384,11 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                   AppPreferences.tr('Bảng tham gia', 'Joined boards'),
                   _joinedBoards.toString(),
                   Icons.group_outlined,
+                ),
+                _statCard(
+                  AppPreferences.tr('Thẻ đã tạo', 'Created tasks'),
+                  _createdTasks.toString(),
+                  Icons.add_task_outlined,
                 ),
                 _statCard(
                   AppPreferences.tr('Task được giao', 'Assigned tasks'),
@@ -450,9 +416,7 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
   }
 
   Widget _statCard(String label, String value, IconData icon) {
-    final width = (MediaQuery.of(context).size.width - 52) / 2;
     return Container(
-      width: width,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -483,9 +447,9 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
   }
 
   Widget _completionChartCard() {
-    final progress = _assignedTasks == 0
+    final progress = _totalRelevantTasks == 0
         ? 0.0
-        : (_doneTasks / _assignedTasks).clamp(0.0, 1.0);
+        : (_doneTasks / _totalRelevantTasks).clamp(0.0, 1.0);
     final percentText = '${(progress * 100).round()}%';
 
     return Container(

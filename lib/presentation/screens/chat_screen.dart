@@ -1,8 +1,10 @@
 import 'dart:async';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../app_preferences.dart';
 
+import '../../app_preferences.dart';
 import '../../data/repositories/chat_repository.dart';
 import '../../domain/entities/direct_message.dart';
 import '../../domain/entities/friend_user.dart';
@@ -25,7 +27,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _sending = false;
   bool _isFriendTyping = false;
   Timer? _readTimer;
-  Timer? _typingTimer;
+  Timer? _friendTypingTimer;
+  Timer? _typingBroadcastTimer;
   RealtimeChannel? _chatChannel;
 
   String? get _currentUserId => Supabase.instance.client.auth.currentUser?.id;
@@ -33,15 +36,17 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _currentUserId; // trigger early
     _subscribeToChat();
     _markRead();
     _readTimer = Timer.periodic(const Duration(seconds: 5), (_) => _markRead());
   }
 
   void _subscribeToChat() {
+    final userId = _currentUserId;
+    if (userId == null) return;
+
     final conversationId = ChatRepository.buildConversationId(
-      _currentUserId ?? '',
+      userId,
       widget.friend.id,
     );
 
@@ -53,11 +58,12 @@ class _ChatScreenState extends State<ChatScreen> {
           callback: (payload) {
             final senderId = payload['sender_id'] as String?;
             if (senderId == widget.friend.id) {
-              setState(() => _isFriendTyping = payload['is_typing'] as bool);
-              // Tự động tắt sau 3 giây nếu không nhận được update
-              _typingTimer?.cancel();
+              setState(
+                () => _isFriendTyping = (payload['is_typing'] as bool?) ?? false,
+              );
+              _friendTypingTimer?.cancel();
               if (_isFriendTyping) {
-                _typingTimer = Timer(const Duration(seconds: 3), () {
+                _friendTypingTimer = Timer(const Duration(seconds: 3), () {
                   if (mounted) setState(() => _isFriendTyping = false);
                 });
               }
@@ -70,7 +76,9 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _readTimer?.cancel();
-    _typingTimer?.cancel();
+    _friendTypingTimer?.cancel();
+    _typingBroadcastTimer?.cancel();
+    _broadcastTyping(false);
     if (_chatChannel != null) {
       Supabase.instance.client.removeChannel(_chatChannel!);
     }
@@ -95,19 +103,67 @@ class _ChatScreenState extends State<ChatScreen> {
         content: text,
       );
       _messageController.clear();
+      _broadcastTyping(false);
       _scrollToBottom();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${AppPreferences.tr('Gửi tin nhắn thất bại', 'Failed to send message')}: $e',
+            '${AppPreferences.tr('Gui tin nhan that bai', 'Failed to send message')}: $e',
           ),
         ),
       );
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  Future<void> _pickAndSendImage() async {
+    if (_sending) return;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        _showSnack(
+          AppPreferences.tr(
+            'Khong doc duoc du lieu anh',
+            'Could not read image data',
+          ),
+        );
+        return;
+      }
+
+      setState(() => _sending = true);
+      final publicUrl = await _chatRepository.uploadChatImage(
+        friendId: widget.friend.id,
+        bytes: bytes,
+        fileName: file.name,
+      );
+      await _chatRepository.sendImageMessage(
+        friendId: widget.friend.id,
+        imageUrl: publicUrl,
+      );
+      _broadcastTyping(false);
+      _scrollToBottom();
+    } catch (e) {
+      _showSnack(
+        '${AppPreferences.tr('Gui anh that bai', 'Failed to send image')}: $e',
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -176,8 +232,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   Text(
                     widget.friend.isOnline
-                        ? AppPreferences.tr('Đang hoạt động', 'Active')
-                        : AppPreferences.tr('Ngoại tuyến', 'Offline'),
+                        ? AppPreferences.tr('Dang hoat dong', 'Active')
+                        : AppPreferences.tr('Ngoai tuyen', 'Offline'),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -200,7 +256,6 @@ class _ChatScreenState extends State<ChatScreen> {
               stream: _chatRepository.streamConversation(widget.friend.id),
               builder: (context, snapshot) {
                 final messages = snapshot.data ?? <DirectMessage>[];
-                // Chỉ cuộn khi có tin nhắn mới hoặc mới vào
                 if (messages.isNotEmpty) {
                   WidgetsBinding.instance.addPostFrameCallback(
                     (_) => _scrollToBottom(),
@@ -230,7 +285,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           const SizedBox(height: 16),
                           Text(
                             AppPreferences.tr(
-                              'Chưa có tin nhắn nào.\nHãy bắt đầu cuộc trò chuyện với ${widget.friend.displayName ?? 'người này'}.',
+                              'Chua co tin nhan nao.\nHay bat dau cuoc tro chuyen voi ${widget.friend.displayName ?? 'nguoi nay'}.',
                               'No messages yet.\nStart a conversation with ${widget.friend.displayName ?? 'this person'}.',
                             ),
                             textAlign: TextAlign.center,
@@ -256,9 +311,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     final message = messages[index];
                     final isMine = message.senderId == _currentUserId;
 
-                    // Logic gom nhóm tin nhắn
-                    bool isFirstInGroup = true;
-                    bool isLastInGroup = true;
+                    var isFirstInGroup = true;
+                    var isLastInGroup = true;
 
                     if (index > 0) {
                       isFirstInGroup =
@@ -322,9 +376,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                       )
                                     : null,
                                 color: isMine
-                                    ? (message.messageType == 'image'
-                                          ? null
-                                          : null)
+                                    ? null
                                     : const Color(0xFFF1F5F9),
                                 borderRadius: BorderRadius.only(
                                   topLeft: const Radius.circular(20),
@@ -347,26 +399,26 @@ class _ChatScreenState extends State<ChatScreen> {
                                           message.content,
                                           width: 240,
                                           fit: BoxFit.cover,
-                                          loadingBuilder:
-                                              (
-                                                context,
-                                                child,
-                                                loadingProgress,
-                                              ) {
-                                                if (loadingProgress == null)
-                                                  return child;
-                                                return Container(
-                                                  width: 240,
-                                                  height: 180,
-                                                  color: Colors.grey.shade200,
-                                                  child: const Center(
-                                                    child:
-                                                        CircularProgressIndicator(
-                                                          strokeWidth: 2,
-                                                        ),
-                                                  ),
-                                                );
-                                              },
+                                          loadingBuilder: (
+                                            context,
+                                            child,
+                                            loadingProgress,
+                                          ) {
+                                            if (loadingProgress == null) {
+                                              return child;
+                                            }
+                                            return Container(
+                                              width: 240,
+                                              height: 180,
+                                              color: Colors.grey.shade200,
+                                              child: const Center(
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
+                                              ),
+                                            );
+                                          },
                                         ),
                                       ),
                                     )
@@ -421,7 +473,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     Padding(
                       padding: const EdgeInsets.only(left: 12, bottom: 8),
                       child: Text(
-                        '${widget.friend.displayName ?? widget.friend.email} ${AppPreferences.tr('đang soạn tin...', 'is typing...')}',
+                        '${widget.friend.displayName ?? widget.friend.email} ${AppPreferences.tr('dang soan tin...', 'is typing...')}',
                         style: TextStyle(
                           fontSize: 12,
                           fontStyle: FontStyle.italic,
@@ -431,7 +483,14 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   Row(
                     children: [
-                      const SizedBox(width: 12),
+                      IconButton(
+                        onPressed: _sending ? null : _pickAndSendImage,
+                        icon: const Icon(
+                          Icons.image_outlined,
+                          color: Colors.blueAccent,
+                        ),
+                        tooltip: AppPreferences.tr('Gui anh', 'Send image'),
+                      ),
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
@@ -442,12 +501,12 @@ class _ChatScreenState extends State<ChatScreen> {
                             controller: _messageController,
                             textInputAction: TextInputAction.send,
                             onSubmitted: (_) => _sendMessage(),
-                            onChanged: (_) => _onTextChanged(),
+                            onChanged: _onTextChanged,
                             minLines: 1,
                             maxLines: 4,
                             decoration: InputDecoration(
                               hintText: AppPreferences.tr(
-                                'Nhập tin nhắn...',
+                                'Nhap tin nhan...',
                                 'Type a message...',
                               ),
                               contentPadding: const EdgeInsets.symmetric(
@@ -488,15 +547,27 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _onTextChanged() {
+  void _onTextChanged(String value) {
     if (_chatChannel == null || _currentUserId == null) return;
 
-    // Sử dụng broadcast để gửi trạng thái đang soạn tin cho đối phương
-    // ignore: invalid_use_of_protected_member
-    _chatChannel!.send(
-      type: 'broadcast' as dynamic,
+    if (value.trim().isEmpty) {
+      _broadcastTyping(false);
+      return;
+    }
+
+    _broadcastTyping(true);
+    _typingBroadcastTimer?.cancel();
+    _typingBroadcastTimer = Timer(
+      const Duration(milliseconds: 1200),
+      () => _broadcastTyping(false),
+    );
+  }
+
+  void _broadcastTyping(bool isTyping) {
+    if (_chatChannel == null || _currentUserId == null) return;
+    _chatChannel!.sendBroadcastMessage(
       event: 'typing',
-      payload: {'sender_id': _currentUserId, 'is_typing': true},
+      payload: {'sender_id': _currentUserId, 'is_typing': isTyping},
     );
   }
 

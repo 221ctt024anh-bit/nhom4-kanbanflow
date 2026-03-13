@@ -12,4 +12,5 @@ abstract class BoardRepository {
   Future<void> removeMember(String boardId, String userId);
   Future<void> updateMemberRole(String boardId, String userId, String role);
   String? getRole(String boardId);
+  Future<void> syncPendingBoards();
 }

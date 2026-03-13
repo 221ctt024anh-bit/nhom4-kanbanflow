@@ -224,12 +224,12 @@ class TaskDescription extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            if (descriptionController.text.length > 500)
+            if (descriptionController.text.length > 1000)
               Text(
-                '${descriptionController.text.length}/2000',
+                '${descriptionController.text.length}/5000',
                 style: TextStyle(
                   fontSize: 12,
-                  color: descriptionController.text.length > 1800
+                  color: descriptionController.text.length > 4500
                       ? Colors.red
                       : Colors.grey,
                 ),
@@ -278,74 +278,60 @@ class TaskDescription extends StatelessWidget {
   }
 
   Widget _buildToolbar() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          _toolbarButton(
-            Icons.format_bold_rounded,
-            () => onInsertMarkdownTag('**', endTag: '**'),
-          ),
-          _toolbarButton(
-            Icons.format_italic_rounded,
-            () => onInsertMarkdownTag('_', endTag: '_'),
-          ),
-          _toolbarButton(Icons.title_rounded, () => onInsertMarkdownTag('### ')),
-          _toolbarButton(
-            Icons.format_list_bulleted_rounded,
-            () => onInsertMarkdownTag('- '),
-          ),
-          _toolbarButton(
-            Icons.checklist_rounded,
-            () => onInsertMarkdownTag('- [ ] '),
-          ),
-          _toolbarButton(
-            Icons.code_rounded,
-            () => onInsertMarkdownTag('`', endTag: '`'),
-          ),
-          _toolbarButton(
-            Icons.link_rounded,
-            () => onInsertMarkdownTag('[', endTag: '](url)'),
-          ),
-          _toolbarButton(Icons.alternate_email, () => onInsertMarkdownTag('@')),
-          _toolbarButton(Icons.numbers, () => onInsertMarkdownTag('#TASK-')),
-          const SizedBox(width: 8),
           _toolbarButton(
             Icons.auto_awesome,
             onAIAssist,
             color: Colors.purple,
-          ),
-          const VerticalDivider(width: 24),
-          _toolbarButton(
-            Icons.bug_report_outlined,
-            () => onApplyTemplate('bug'),
-            color: Colors.redAccent,
+            label: AppPreferences.tr('AI Thông minh', 'Smart AI'),
           ),
           _toolbarButton(
-            Icons.rocket_launch_outlined,
-            () => onApplyTemplate('feature'),
-            color: Colors.purpleAccent,
-          ),
-          _toolbarButton(
-            Icons.event_note_rounded,
-            () => onApplyTemplate('meeting'),
-            color: Colors.blueAccent,
-          ),
-          _toolbarButton(
-            Icons.search_rounded,
-            () => onApplyTemplate('research'),
-            color: Colors.teal,
+            Icons.checklist_rounded,
+            () => onInsertMarkdownTag('- [ ] '),
+            label: AppPreferences.tr('Danh sách', 'Checklist'),
           ),
         ],
       ),
     );
   }
 
-  Widget _toolbarButton(IconData icon, VoidCallback onTap, {Color? color}) {
+  Widget _toolbarButton(IconData icon, VoidCallback onTap,
+      {Color? color, String? label}) {
+    if (label != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: (color ?? Colors.blueGrey).withOpacity(0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: color ?? const Color(0xFF64748B)),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: color ?? const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return IconButton(
       icon: Icon(icon, size: 20, color: color ?? const Color(0xFF64748B)),
       onPressed: onTap,
-      tooltip: 'Markdown Shortcut',
+      tooltip: 'Shortcut',
     );
   }
 }

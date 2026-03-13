@@ -158,6 +158,7 @@ class _WebTaskViewScreenState extends State<WebTaskViewScreen> {
                         attachments: _attachments,
                         loading: _loadingAttachments,
                         onOpen: (a) => launchUrl(Uri.parse(a.publicUrl)),
+                        onDownload: (a) => launchUrl(Uri.parse(a.publicUrl), mode: LaunchMode.externalApplication),
                       ),
                       const SizedBox(height: 24),
                       TaskDescription(
@@ -206,6 +207,7 @@ class _WebTaskViewScreenState extends State<WebTaskViewScreen> {
                           onPickAndUpload: () {},
                           onOpen: (a) => launchUrl(Uri.parse(a.publicUrl)),
                           onDelete: (a) {},
+                          onDownload: (a) => launchUrl(Uri.parse(a.publicUrl), mode: LaunchMode.externalApplication),
                         ),
                         const SizedBox(height: 32),
                         TaskComments(
