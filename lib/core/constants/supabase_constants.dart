@@ -9,4 +9,5 @@ class SupabaseConstants {
   /// URL used by Supabase email links to return to this app for password recovery.
   /// Make sure this exact URL is whitelisted in Supabase Auth Redirect URLs.
   static const String resetPasswordRedirectTo = 'taskmate://reset-password';
+  static const String authRedirectTo = 'taskmate://login-callback';
 }

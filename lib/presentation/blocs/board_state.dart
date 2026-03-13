@@ -8,7 +8,8 @@ class BoardLoading extends BoardState {}
 
 class BoardLoaded extends BoardState {
   final List<Board> boards;
-  BoardLoaded(this.boards);
+  final String? Function(String boardId) getRole;
+  BoardLoaded(this.boards, this.getRole);
 }
 
 class BoardError extends BoardState {

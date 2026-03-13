@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../app_preferences.dart';
 
 import '../../domain/entities/friend_user.dart';
+import '../../data/repositories/friend_repository.dart';
+import '../../injection_container.dart';
 import 'chat_screen.dart';
 
 class FriendProfileScreen extends StatefulWidget {
@@ -20,8 +22,10 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
   bool _loadingStats = true;
   int _ownedBoards = 0;
   int _joinedBoards = 0;
+  int _createdTasks = 0;
   int _assignedTasks = 0;
   int _doneTasks = 0;
+  int _totalRelevantTasks = 0;
   int _friendCount = 0;
 
   @override
@@ -71,65 +75,117 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
     return '$day/$month/$year $hour:$minute';
   }
 
+  final _friendRepo = sl<FriendRepository>();
+
   Future<void> _loadStats() async {
     final userId = widget.friend.id;
 
     try {
-      int ownedBoards = 0;
-      int joinedBoards = 0;
-      int assignedTasks = 0;
-      int doneTasks = 0;
-      int friendCount = 0;
+      final results = await Future.wait([
+        _client.from('boards').select('id').eq('owner_id', userId),
+        _client.from('board_members').select('board_id').eq('user_id', userId),
+        _client.from('tasks').select('id, status').eq('creator_id', userId),
+        _client.from('task_assignees').select('task_id, tasks(id, status, creator_id)').eq('user_id', userId),
+        _client.from('friendships').select('user_id, friend_id').or('user_id.eq.$userId,friend_id.eq.$userId'),
+      ]);
 
-      try {
-        final ownedBoardsResponse = await _client
-            .from('boards')
-            .select('id')
-            .eq('owner_id', userId);
-        ownedBoards = (ownedBoardsResponse as List).length;
-      } catch (_) {}
+      final owned = results[0] as List;
+      final joined = results[1] as List;
+      final created = (results[2] as List).map((e) => e as Map<String, dynamic>);
+      final assignedJoin = (results[3] as List).map((e) => e as Map<String, dynamic>);
+      final friends = results[4] as List;
 
-      try {
-        final joinedBoardsResponse = await _client
-            .from('board_members')
-            .select('board_id')
-            .eq('user_id', userId);
-        joinedBoards = (joinedBoardsResponse as List).length;
-      } catch (_) {}
+      final allTasks = <String, String>{}; // Map<Id, Status>
+      for (final t in created) {
+        allTasks[t['id'].toString()] = t['status'].toString();
+      }
 
-      try {
-        final assignedTasksResponse = await _client
-            .from('tasks')
-            .select('id,status')
-            .eq('assignee_id', userId);
-        final assigned = assignedTasksResponse as List;
-        assignedTasks = assigned.length;
-        doneTasks = assigned
-            .where((item) => (item as Map<String, dynamic>)['status'] == 'done')
-            .length;
-      } catch (_) {}
+      int assignedFromOthers = 0;
+      for (final a in assignedJoin) {
+        final task = a['tasks'] as Map<String, dynamic>?;
+        if (task != null) {
+          allTasks[task['id'].toString()] = task['status'].toString();
+          if (task['creator_id'] != userId) {
+            assignedFromOthers++;
+          }
+        }
+      }
 
-      try {
-        final friendResponse = await _client
-            .from('friendships')
-            .select('friend_id')
-            .eq('user_id', userId);
-        friendCount = (friendResponse as List).length;
-      } catch (_) {}
+      final uniqueFriends = <String>{};
+      for (final item in friends) {
+        final m = item as Map<String, dynamic>;
+        if (m['user_id'] != userId) uniqueFriends.add(m['user_id']);
+        if (m['friend_id'] != userId) uniqueFriends.add(m['friend_id']);
+      }
 
       if (!mounted) return;
       setState(() {
-        _ownedBoards = ownedBoards;
-        _joinedBoards = joinedBoards;
-        _assignedTasks = assignedTasks;
-        _doneTasks = doneTasks;
-        _friendCount = friendCount;
+        _ownedBoards = owned.length;
+        _joinedBoards = joined.length > _ownedBoards ? joined.length - _ownedBoards : 0;
+        _createdTasks = created.length;
+        _assignedTasks = assignedFromOthers;
+        _doneTasks = allTasks.values.where((s) => s == 'done').length;
+        _totalRelevantTasks = allTasks.length;
+        _friendCount = uniqueFriends.length;
       });
+    } catch (e) {
+      debugPrint('Error loading friend stats: $e');
     } finally {
       if (mounted) {
         setState(() => _loadingStats = false);
       }
     }
+  }
+
+  Future<void> _removeFriend() async {
+    try {
+      await _friendRepo.removeFriend(widget.friend.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppPreferences.tr('Đã xóa bạn bè.', 'Friend removed.')),
+        ),
+      );
+      Navigator.pop(context, true); // Trả về true để thông báo cần refresh
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${AppPreferences.tr('Không thể xóa bạn bè', 'Could not remove friend')}: $e',
+          ),
+        ),
+      );
+    }
+  }
+
+  void _showRemoveDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(AppPreferences.tr('Xác nhận xóa', 'Confirm removal')),
+        content: Text(
+          AppPreferences.tr(
+            'Bạn có chắc chắn muốn xóa "${widget.friend.displayName ?? widget.friend.email}" khỏi danh sách bạn bè?',
+            'Are you sure you want to remove "${widget.friend.displayName ?? widget.friend.email}" from your friends list?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(AppPreferences.tr('Hủy', 'Cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _removeFriend();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: Text(AppPreferences.tr('Xóa', 'Remove')),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -226,6 +282,20 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                 label: Text(AppPreferences.tr('Nhắn tin', 'Message')),
               ),
             ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _showRemoveDialog(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.redAccent,
+                  side: const BorderSide(color: Colors.redAccent),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                icon: const Icon(Icons.person_remove_outlined),
+                label: Text(AppPreferences.tr('Xóa bạn bè', 'Remove Friend')),
+              ),
+            ),
             const SizedBox(height: 16),
             _infoCard(
               icon: widget.friend.isOnline
@@ -297,9 +367,13 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.3,
               children: [
                 _statCard(
                   AppPreferences.tr('Bảng sở hữu', 'Owned boards'),
@@ -310,6 +384,11 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
                   AppPreferences.tr('Bảng tham gia', 'Joined boards'),
                   _joinedBoards.toString(),
                   Icons.group_outlined,
+                ),
+                _statCard(
+                  AppPreferences.tr('Thẻ đã tạo', 'Created tasks'),
+                  _createdTasks.toString(),
+                  Icons.add_task_outlined,
                 ),
                 _statCard(
                   AppPreferences.tr('Task được giao', 'Assigned tasks'),
@@ -337,9 +416,7 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
   }
 
   Widget _statCard(String label, String value, IconData icon) {
-    final width = (MediaQuery.of(context).size.width - 52) / 2;
     return Container(
-      width: width,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -370,9 +447,9 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
   }
 
   Widget _completionChartCard() {
-    final progress = _assignedTasks == 0
+    final progress = _totalRelevantTasks == 0
         ? 0.0
-        : (_doneTasks / _assignedTasks).clamp(0.0, 1.0);
+        : (_doneTasks / _totalRelevantTasks).clamp(0.0, 1.0);
     final percentText = '${(progress * 100).round()}%';
 
     return Container(

@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../../domain/entities/user.dart' as user_ent;
 
 abstract class AuthEvent extends Equatable {
   const AuthEvent();
@@ -47,4 +48,14 @@ class UpdatePasswordRequested extends AuthEvent {
 
   @override
   List<Object?> get props => [newPassword];
+}
+
+class GoogleSignInRequested extends AuthEvent {}
+
+class AuthStatusChanged extends AuthEvent {
+  final user_ent.UserModel? user;
+  const AuthStatusChanged(this.user);
+
+  @override
+  List<Object?> get props => [user];
 }

@@ -10,8 +10,9 @@ class TaskInteractionRepository {
   static const String attachmentsBucket = 'task-attachments';
   final SupabaseClient _client;
 
-  TaskInteractionRepository({SupabaseClient? client})
-    : _client = client ?? Supabase.instance.client;
+  TaskInteractionRepository({
+    SupabaseClient? client,
+  }) : _client = client ?? Supabase.instance.client;
 
   Future<List<TaskComment>> getComments(String taskId) async {
     final response = await _client
@@ -50,6 +51,10 @@ class TaskInteractionRepository {
       content: (response['content'] as String?) ?? '',
       createdAt: (response['created_at'] as String?) ?? '',
     );
+  }
+
+  Future<void> deleteComment(String commentId) async {
+    await _client.from('task_comments').delete().eq('id', commentId);
   }
 
   Future<List<TaskAttachment>> getAttachments(String taskId) async {
@@ -126,6 +131,10 @@ class TaskInteractionRepository {
       ]);
     }
     await _client.from('task_attachments').delete().eq('id', attachment.id);
+  }
+
+  Future<Uint8List> downloadAttachment(String filePath) async {
+    return await _client.storage.from(attachmentsBucket).download(filePath);
   }
 
   Future<(double average, int count)> getRatingStats(String taskId) async {

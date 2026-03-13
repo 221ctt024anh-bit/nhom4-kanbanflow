@@ -36,3 +36,12 @@ class DeleteBoard {
     return await repository.deleteBoard(id);
   }
 }
+
+class WatchBoardsUseCase {
+  final BoardRepository repository;
+  WatchBoardsUseCase(this.repository);
+
+  Stream<List<Board>> call() {
+    return repository.watchBoards();
+  }
+}

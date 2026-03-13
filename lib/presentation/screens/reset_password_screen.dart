@@ -71,7 +71,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ScaffoldMessenger.of(
               context,
             ).showSnackBar(SnackBar(content: Text(state.message)));
-            Navigator.pop(context);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) Navigator.pop(context);
+            });
           }
         },
         builder: (context, state) {

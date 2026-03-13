@@ -28,3 +28,5 @@ class DeleteTaskEvent extends TaskEvent {
   final String id;
   DeleteTaskEvent(this.id);
 }
+
+class ResetTasks extends TaskEvent {}

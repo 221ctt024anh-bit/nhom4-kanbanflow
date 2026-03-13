@@ -24,7 +24,9 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> updatePassword({required String newPassword}) async {
     try {
-      await supabaseClient.auth.updateUser(UserAttributes(password: newPassword));
+      await supabaseClient.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
     } catch (e) {
       throw Exception('Loi khi cap nhat mat khau: $e');
     }
@@ -75,6 +77,14 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<void> signInWithGoogle() async {
+    await supabaseClient.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: SupabaseConstants.authRedirectTo,
+    );
+  }
+
+  @override
   Future<void> signOut() async {
     final userId = supabaseClient.auth.currentUser?.id;
     if (userId != null) {
@@ -107,6 +117,11 @@ class AuthRepositoryImpl implements AuthRepository {
       'email': user.email,
       'display_name': email.split('@')[0],
     });
+
+    // Check if session exists (user is signed in automatically)
+    if (response.session == null) {
+      throw Exception('CONFIRMATION_REQUIRED');
+    }
 
     return user_ent.UserModel(
       id: user.id,

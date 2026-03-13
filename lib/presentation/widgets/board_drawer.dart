@@ -138,6 +138,8 @@ class BoardDrawer extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final board = boards[index];
                       final isSelected = board.id == selectedBoardId;
+                      final role = state.getRole(board.id);
+                      final canDelete = role == 'owner' || role == 'admin';
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
@@ -223,23 +225,24 @@ class BoardDrawer extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.delete_outline_rounded,
-                                    color: isSelected
-                                        ? Colors.redAccent.withOpacity(0.8)
-                                        : const Color(
-                                            0xFF475569,
-                                          ), // Darker red/grey until hover
-                                    size: 20,
+                                if (canDelete)
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: isSelected
+                                          ? Colors.redAccent.withOpacity(0.8)
+                                          : const Color(
+                                              0xFF475569,
+                                            ), // Darker red/grey until hover
+                                      size: 20,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () =>
+                                        onDeleteBoard(context, board),
                                   ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                  constraints: const BoxConstraints(),
-                                  onPressed: () =>
-                                      onDeleteBoard(context, board),
-                                ),
                               ],
                             ),
                           ),

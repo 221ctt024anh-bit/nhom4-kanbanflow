@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entities/board.dart';
@@ -11,6 +13,11 @@ import '../models/board_model.dart';
 class BoardRepositoryImpl implements BoardRepository {
   final SupabaseClient supabaseClient;
   final LocalDatabase localDatabase;
+  final Map<String, String> _roleCache = {};
+  StreamController<List<Board>>? _boardsController;
+  RealtimeChannel? _ownerBoardsChannel;
+  RealtimeChannel? _memberBoardsChannel;
+  Timer? _refreshDebounce;
 
   BoardRepositoryImpl({
     required this.supabaseClient,
@@ -23,7 +30,7 @@ class BoardRepositoryImpl implements BoardRepository {
     if (userId == null) return [];
 
     try {
-      await _syncPendingBoardOperations();
+      await syncPendingBoards();
 
       final ownerResponse = await supabaseClient
           .from('boards')
@@ -32,7 +39,7 @@ class BoardRepositoryImpl implements BoardRepository {
 
       final memberResponse = await supabaseClient
           .from('board_members')
-          .select('boards(*)')
+          .select('role, boards(*)')
           .eq('user_id', userId);
 
       final boardsMap = <String, BoardModel>{};
@@ -40,13 +47,16 @@ class BoardRepositoryImpl implements BoardRepository {
       for (final row in (ownerResponse as List)) {
         final board = BoardModel.fromMap(row as Map<String, dynamic>);
         boardsMap[board.id] = board;
+        _updateRoleCache(board.id, 'owner');
       }
 
       for (final row in (memberResponse as List)) {
-        final boardData = (row as Map<String, dynamic>)['boards'];
+        final rowMap = row as Map<String, dynamic>;
+        final boardData = rowMap['boards'];
         if (boardData != null) {
           final board = BoardModel.fromMap(boardData as Map<String, dynamic>);
           boardsMap[board.id] = board;
+          _updateRoleCache(board.id, rowMap['role'] as String?);
         }
       }
 
@@ -63,7 +73,53 @@ class BoardRepositoryImpl implements BoardRepository {
   }
 
   @override
+  Stream<List<Board>> watchBoards() {
+    final userId = supabaseClient.auth.currentUser?.id;
+    if (userId == null) {
+      return Stream.value([]);
+    }
+
+    _boardsController ??= StreamController<List<Board>>.broadcast();
+
+    _ownerBoardsChannel ??= supabaseClient
+        .channel('public:boards:owner_id=eq.$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'boards',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'owner_id',
+            value: userId,
+          ),
+          callback: (_) => _scheduleBoardsRefresh(),
+        )
+        .subscribe();
+
+    _memberBoardsChannel ??= supabaseClient
+        .channel('public:board_members:user_id=eq.$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'board_members',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: (_) => _scheduleBoardsRefresh(),
+        )
+        .subscribe();
+
+    _scheduleBoardsRefresh(immediate: true);
+    return _boardsController!.stream;
+  }
+
+  @override
   Future<void> addBoard(Board board) async {
+    debugPrint(
+      'DEBUG: BoardRepositoryImpl.addBoard - Starting for board: ${board.id}',
+    );
     final boardModel = BoardModel(
       id: board.id,
       title: board.title,
@@ -73,6 +129,7 @@ class BoardRepositoryImpl implements BoardRepository {
 
     await localDatabase.upsertBoard(boardModel);
     try {
+      debugPrint('DEBUG: BoardRepositoryImpl.addBoard - Upserting board');
       await supabaseClient
           .from('boards')
           .upsert(boardModel.toMap(), onConflict: 'id');
@@ -82,8 +139,12 @@ class BoardRepositoryImpl implements BoardRepository {
           'user_id': board.ownerId,
           'role': 'admin',
         });
-      } catch (_) {}
-    } catch (_) {
+      } catch (e) {
+        debugPrint('DEBUG: BoardRepositoryImpl.addBoard - Member insert: $e');
+      }
+      _scheduleBoardsRefresh();
+    } catch (e) {
+      debugPrint('DEBUG: BoardRepositoryImpl.addBoard - Queueing sync: $e');
       await localDatabase.enqueueOperation(
         entity: 'board',
         operation: 'add',
@@ -107,6 +168,7 @@ class BoardRepositoryImpl implements BoardRepository {
           .from('boards')
           .update(boardModel.toMap())
           .eq('id', board.id);
+      _scheduleBoardsRefresh();
     } catch (_) {
       await localDatabase.enqueueOperation(
         entity: 'board',
@@ -121,6 +183,8 @@ class BoardRepositoryImpl implements BoardRepository {
     await localDatabase.deleteBoard(id);
     try {
       await supabaseClient.from('boards').delete().eq('id', id);
+      _roleCache.remove(id);
+      _scheduleBoardsRefresh();
     } catch (_) {
       await localDatabase.enqueueOperation(
         entity: 'board',
@@ -139,7 +203,7 @@ class BoardRepositoryImpl implements BoardRepository {
         .maybeSingle();
 
     if (profileResponse == null) {
-      throw Exception('Không tìm thấy người dùng với email $email.');
+      throw Exception('Khong tim thay nguoi dung voi email $email.');
     }
 
     final userId = profileResponse['id'];
@@ -151,7 +215,7 @@ class BoardRepositoryImpl implements BoardRepository {
         .maybeSingle();
 
     if (existingMember != null) {
-      throw Exception('Người dùng này đã có trong bảng.');
+      throw Exception('Nguoi dung nay da co trong bang.');
     }
 
     await supabaseClient.from('board_members').insert({
@@ -159,6 +223,7 @@ class BoardRepositoryImpl implements BoardRepository {
       'user_id': userId,
       'role': 'member',
     });
+    _scheduleBoardsRefresh();
   }
 
   @override
@@ -181,13 +246,21 @@ class BoardRepositoryImpl implements BoardRepository {
         .filter('id', 'in', userIds);
 
     final profiles = profileResponse as List;
+    final roleMap = {
+      for (var row in memberRows)
+        (row as Map<String, dynamic>)['user_id'] as String:
+            row['role'] as String?,
+    };
+
     return profiles.map((profile) {
       final map = profile as Map<String, dynamic>;
+      final id = map['id'] as String;
       return UserModel(
-        id: map['id'] as String,
+        id: id,
         email: (map['email'] as String?) ?? '',
         displayName: map['display_name'] as String?,
         avatarUrl: map['avatar_url'] as String?,
+        role: roleMap[id],
       );
     }).toList();
   }
@@ -199,9 +272,58 @@ class BoardRepositoryImpl implements BoardRepository {
         .delete()
         .eq('board_id', boardId)
         .eq('user_id', userId);
+    _roleCache.remove(boardId);
+    _scheduleBoardsRefresh();
   }
 
-  Future<void> _syncPendingBoardOperations() async {
+  @override
+  Future<void> updateMemberRole(
+    String boardId,
+    String userId,
+    String role,
+  ) async {
+    await supabaseClient.from('board_members').update({'role': role}).match({
+      'board_id': boardId,
+      'user_id': userId,
+    });
+    _roleCache.remove(boardId);
+    _scheduleBoardsRefresh();
+  }
+
+  @override
+  String? getRole(String boardId) => _roleCache[boardId];
+
+  void _updateRoleCache(String boardId, String? role) {
+    if (role != null) {
+      _roleCache[boardId] = role;
+    }
+  }
+
+  void _scheduleBoardsRefresh({bool immediate = false}) {
+    if (_boardsController == null || _boardsController!.isClosed) {
+      return;
+    }
+
+    _refreshDebounce?.cancel();
+    _refreshDebounce = Timer(
+      immediate ? Duration.zero : const Duration(milliseconds: 250),
+      () async {
+        try {
+          final boards = await getBoards();
+          if (!(_boardsController?.isClosed ?? true)) {
+            _boardsController!.add(boards);
+          }
+        } catch (error, stackTrace) {
+          if (!(_boardsController?.isClosed ?? true)) {
+            _boardsController!.addError(error, stackTrace);
+          }
+        }
+      },
+    );
+  }
+
+  @override
+  Future<void> syncPendingBoards() async {
     final pending = await localDatabase.getPendingOperations('board');
     for (final op in pending) {
       try {
@@ -214,15 +336,20 @@ class BoardRepositoryImpl implements BoardRepository {
               'user_id': payload['owner_id'],
               'role': 'admin',
             });
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('DEBUG: BoardRepositoryImpl._sync member insert: $e');
+          }
         } else if (op.operation == 'update') {
-          await supabaseClient.from('boards').update(payload).eq('id', payload['id']);
+          await supabaseClient
+              .from('boards')
+              .update(payload)
+              .eq('id', payload['id']);
         } else if (op.operation == 'delete') {
           await supabaseClient.from('boards').delete().eq('id', payload['id']);
         }
         await localDatabase.removePendingOperation(op.id);
       } catch (_) {
-        break;
+        continue;
       }
     }
   }

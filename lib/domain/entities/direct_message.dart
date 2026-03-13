@@ -7,6 +7,7 @@ class DirectMessage {
   final String createdAt;
   final bool isRead;
   final String? readAt;
+  final String messageType; // 'text' or 'image'
 
   const DirectMessage({
     required this.id,
@@ -17,5 +18,6 @@ class DirectMessage {
     required this.createdAt,
     required this.isRead,
     this.readAt,
+    this.messageType = 'text',
   });
 }

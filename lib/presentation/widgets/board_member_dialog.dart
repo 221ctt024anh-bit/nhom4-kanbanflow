@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../app_preferences.dart';
 import '../../domain/entities/user.dart';
+import '../../domain/entities/friend_user.dart';
 import '../../domain/repositories/board_repository.dart';
+import '../../data/repositories/friend_repository.dart';
 import '../../injection_container.dart' as di;
 import '../blocs/auth/auth_bloc.dart';
 import '../blocs/auth/auth_state.dart';
@@ -24,6 +26,7 @@ class BoardMemberDialog extends StatefulWidget {
 class _BoardMemberDialogState extends State<BoardMemberDialog> {
   final TextEditingController _emailController = TextEditingController();
   List<UserModel> _members = [];
+  List<FriendUser> _friends = [];
   bool _isLoading = true;
   bool _isInviting = false;
   String? _error;
@@ -47,9 +50,16 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
     });
     try {
       final repository = di.sl<BoardRepository>();
-      final members = await repository.getBoardMembers(widget.boardId);
+      final friendRepo = di.sl<FriendRepository>();
+
+      final results = await Future.wait([
+        repository.getBoardMembers(widget.boardId),
+        friendRepo.getFriends(),
+      ]);
+
       setState(() {
-        _members = members;
+        _members = results[0] as List<UserModel>;
+        _friends = results[1] as List<FriendUser>;
         _isLoading = false;
       });
     } catch (e) {
@@ -99,6 +109,41 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
     }
   }
 
+  Future<void> _inviteFriend(FriendUser friend) async {
+    setState(() {
+      _isInviting = true;
+      _error = null;
+    });
+
+    try {
+      final repository = di.sl<BoardRepository>();
+      await repository.addMember(widget.boardId, friend.email);
+      await _loadMembers(); // Reload list
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppPreferences.tr(
+                'Đã mời ${friend.displayName ?? friend.email} thành công!',
+                'Invited ${friend.displayName ?? friend.email} successfully!',
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInviting = false;
+        });
+      }
+    }
+  }
+
   Future<void> _removeMember(String userId) async {
     try {
       final repository = di.sl<BoardRepository>();
@@ -108,6 +153,39 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
       setState(() {
         _error = e.toString();
       });
+    }
+  }
+
+  Future<void> _updateRole(String userId, String currentRole) async {
+    final String? newRole = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(AppPreferences.tr('Chọn vai trò', 'Select Role')),
+        children: ['admin', 'member', 'viewer'].map((r) {
+          return SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, r),
+            child: Text(
+              r == 'admin'
+                  ? AppPreferences.tr('Quản trị viên', 'Admin')
+                  : r == 'member'
+                  ? AppPreferences.tr('Thành viên', 'Member')
+                  : AppPreferences.tr('Chỉ xem', 'Viewer'),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+
+    if (newRole != null && newRole != currentRole) {
+      try {
+        final repository = di.sl<BoardRepository>();
+        await repository.updateMemberRole(widget.boardId, userId, newRole);
+        _loadMembers();
+      } catch (e) {
+        setState(() {
+          _error = e.toString();
+        });
+      }
     }
   }
 
@@ -121,11 +199,11 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(
         AppPreferences.tr('Thành viên & Phân quyền', 'Board Members'),
-        style: TextStyle(fontWeight: FontWeight.bold),
+        style: const TextStyle(fontWeight: FontWeight.bold),
       ),
       content: SizedBox(
         width: 400,
-        height: 400,
+        height: 450,
         child: Column(
           children: [
             if (isOwner) ...[
@@ -179,6 +257,9 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
                 ],
               ),
               const SizedBox(height: 16),
+              // Filter friends who are NOT already members
+              _buildSuggestions(),
+              const SizedBox(height: 12),
             ],
             if (_error != null)
               Container(
@@ -209,6 +290,7 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
                       itemCount: _members.length,
                       itemBuilder: (context, index) {
                         final member = _members[index];
+                        final isMemberOwner = member.id == widget.ownerId;
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: CircleAvatar(
@@ -229,26 +311,33 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
                             member.email,
                             style: const TextStyle(fontSize: 12),
                           ),
-                          trailing: (isOwner && member.id != widget.ownerId)
-                              ? IconButton(
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                onTap: (isOwner && !isMemberOwner)
+                                    ? () => _updateRole(
+                                        member.id,
+                                        member.role ?? 'member',
+                                      )
+                                    : null,
+                                child: _buildRoleChip(
+                                  isMemberOwner ? 'owner' : member.role,
+                                ),
+                              ),
+                              if (isOwner && !isMemberOwner) ...[
+                                const SizedBox(width: 4),
+                                IconButton(
                                   icon: const Icon(
                                     Icons.remove_circle_outline,
                                     color: Colors.redAccent,
+                                    size: 20,
                                   ),
                                   onPressed: () => _removeMember(member.id),
-                                )
-                              : (member.id == widget.ownerId
-                                    ? Chip(
-                                        label: Text(
-                                          AppPreferences.tr(
-                                            'Chủ sở hữu',
-                                            'Owner',
-                                          ),
-                                          style: TextStyle(fontSize: 10),
-                                        ),
-                                        padding: EdgeInsets.zero,
-                                      )
-                                    : null),
+                                ),
+                              ],
+                            ],
+                          ),
                         );
                       },
                     ),
@@ -262,6 +351,131 @@ class _BoardMemberDialogState extends State<BoardMemberDialog> {
           child: Text(AppPreferences.tr('Đóng', 'Close')),
         ),
       ],
+    );
+  }
+
+  Widget _buildSuggestions() {
+    final suggestions = _friends
+        .where((f) => !_members.any((m) => m.id == f.id))
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          AppPreferences.tr('Gợi ý bạn bè', 'Suggested Friends'),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (suggestions.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              AppPreferences.tr('Không có gợi ý mới', 'No new suggestions'),
+              style: const TextStyle(
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+                color: Colors.grey,
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 75,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: suggestions.length,
+              itemBuilder: (context, index) {
+                final friend = suggestions[index];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: InkWell(
+                    onTap: _isInviting ? null : () => _inviteFriend(friend),
+                    borderRadius: BorderRadius.circular(30),
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor: Colors.blueAccent.withOpacity(0.1),
+                          backgroundImage: friend.avatarUrl != null
+                              ? NetworkImage(friend.avatarUrl!)
+                              : null,
+                          child: friend.avatarUrl == null
+                              ? Text(
+                                  (friend.displayName ?? friend.email)
+                                      .substring(0, 1)
+                                      .toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.blueAccent,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          width: 60,
+                          child: Text(
+                            friend.displayName ?? friend.email.split('@').first,
+                            style: const TextStyle(fontSize: 10),
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildRoleChip(String? role) {
+    Color color;
+    String label;
+
+    switch (role) {
+      case 'owner':
+        color = Colors.purple;
+        label = AppPreferences.tr('Chủ bảng', 'Owner');
+        break;
+      case 'admin':
+        color = Colors.orange;
+        label = AppPreferences.tr('Quản trị viên', 'Admin');
+        break;
+      case 'viewer':
+        color = Colors.grey;
+        label = AppPreferences.tr('Chỉ xem', 'Viewer');
+        break;
+      case 'member':
+      default:
+        color = Colors.blueAccent;
+        label = AppPreferences.tr('Thành viên', 'Member');
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.5), width: 0.5),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: color.withOpacity(0.8),
+        ),
+      ),
     );
   }
 }

@@ -12,6 +12,8 @@ import 'app_preferences.dart';
 import 'core/constants/supabase_constants.dart';
 import 'injection_container.dart' as di;
 import 'data/repositories/user_settings_repository.dart';
+import 'core/services/notification_service.dart';
+import 'core/services/supabase_notification_listener.dart';
 import 'presentation/blocs/auth/auth_bloc.dart';
 import 'presentation/blocs/auth/auth_event.dart';
 import 'presentation/blocs/auth/auth_state.dart';
@@ -25,6 +27,8 @@ import 'presentation/screens/login_screen.dart';
 import 'presentation/screens/my_profile_screen.dart';
 import 'presentation/screens/reset_password_screen.dart';
 import 'presentation/screens/settings_screen.dart';
+import 'presentation/screens/web_task_view_screen.dart';
+import 'presentation/screens/my_tasks_screen.dart';
 import 'data/repositories/friend_repository.dart';
 
 Future<void> main() async {
@@ -44,6 +48,7 @@ Future<void> main() async {
   }
 
   await di.init();
+  await NotificationService.init();
 
   runApp(const MyApp());
 }
@@ -59,7 +64,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   StreamSubscription? _authSubscription;
   bool _openingRecoveryScreen = false;
-  final FriendRepository _friendRepository = FriendRepository();
+  final FriendRepository _friendRepository = di.sl<FriendRepository>();
   final UserSettingsRepository _settingsRepository = UserSettingsRepository();
   Timer? _presenceTimer;
   String? _preferencesLoadedForUserId;
@@ -76,8 +81,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (_openingRecoveryScreen) return;
 
       _openingRecoveryScreen = true;
-      await _navigatorKey.currentState?.pushNamed('/reset-password');
-      _openingRecoveryScreen = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _navigatorKey.currentState?.pushNamed('/reset-password');
+        _openingRecoveryScreen = false;
+      });
     });
     unawaited(_syncAppPreferences());
     _startPresenceHeartbeat();
@@ -173,41 +180,66 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           create: (_) => di.sl<BoardBloc>()..add(LoadBoards()),
         ),
       ],
-      child: ValueListenableBuilder<AppPreferencesState>(
-        valueListenable: AppPreferences.notifier,
-        builder: (context, prefs, _) => MaterialApp(
-          navigatorKey: _navigatorKey,
-          title: 'TaskMate',
-          debugShowCheckedModeBanner: false,
-          routes: {
-            '/reset-password': (_) => const ResetPasswordScreen(),
-            '/settings': (_) => const SettingsScreen(),
-            '/profile': (_) => const MyProfileScreen(),
-            '/friends': (_) => const FriendsScreen(),
-          },
-          locale: prefs.locale,
-          supportedLocales: const [Locale('vi'), Locale('en')],
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          themeMode: prefs.themeMode,
-          theme: _lightTheme,
-          darkTheme: _darkTheme,
-          home: BlocBuilder<AuthBloc, AuthState>(
-            builder: (context, state) {
-              if (state is AuthLoading) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
+      child: BlocListener<AuthBloc, AuthState>(
+        listener: (context, state) {
+          if (state is Authenticated) {
+            SupabaseNotificationListener.start(state.user.id);
+            // Nạp lại dữ liệu cho tài khoản mới
+            context.read<BoardBloc>().add(WatchBoards());
+            context.read<TaskBloc>().add(LoadTasks());
+
+            // Dọn dẹp stack để không bị kẹt ở màn hình Login/Register
+            _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+          } else if (state is Unauthenticated) {
+            SupabaseNotificationListener.stop();
+            // Xóa sạch dữ liệu của tài khoản cũ
+            context.read<BoardBloc>().add(ResetBoards());
+            context.read<TaskBloc>().add(ResetTasks());
+          }
+        },
+        child: ValueListenableBuilder<AppPreferencesState>(
+          valueListenable: AppPreferences.notifier,
+          builder: (context, prefs, _) => MaterialApp(
+            navigatorKey: _navigatorKey,
+            title: 'TaskMate',
+            debugShowCheckedModeBanner: false,
+            routes: {
+              '/reset-password': (_) => const ResetPasswordScreen(),
+              '/settings': (_) => const SettingsScreen(),
+              '/profile': (_) => const MyProfileScreen(),
+              '/friends': (_) => const FriendsScreen(),
+              '/my-tasks': (_) => const MyTasksScreen(),
+            },
+            locale: prefs.locale,
+            supportedLocales: const [Locale('vi'), Locale('en')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            themeMode: prefs.themeMode,
+            theme: _lightTheme,
+            darkTheme: _darkTheme,
+            onGenerateRoute: (settings) {
+              if (settings.name != null && settings.name!.startsWith('/task/')) {
+                final taskId = settings.name!.replaceFirst('/task/', '');
+                return MaterialPageRoute(
+                  builder: (context) => WebTaskViewScreen(taskId: taskId),
                 );
               }
-              if (state is Authenticated) {
-                unawaited(_syncAppPreferences());
-                return const BoardScreen();
-              }
-              return const LoginScreen();
+              return null;
             },
+            home: BlocBuilder<AuthBloc, AuthState>(
+              builder: (context, state) {
+                if (state is Authenticated) {
+                  unawaited(_syncAppPreferences());
+                  return const BoardScreen();
+                }
+                // Nếu đang loading (ví qua browser), ta vẫn giữ LoginScreen
+                // vì LoginScreen đã có cơ chế hiển thị loading/spinner riêng.
+                return const LoginScreen();
+              },
+            ),
           ),
         ),
       ),

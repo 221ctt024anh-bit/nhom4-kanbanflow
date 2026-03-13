@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -153,28 +153,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _saving = true);
     try {
-      String? displayNameError;
-      try {
-        await _repo.updateDisplayName(
-          userId: _userId!,
-          displayName: displayName,
-        );
-        await _repo.updateBio(userId: _userId!, bio: bio);
-      } catch (e) {
-        displayNameError = e.toString();
-      }
-
+      String? newAvatarUrl;
       if (_pendingAvatarBytes != null && _pendingAvatarExtension != null) {
-        final avatarUrl = await _repo.uploadAvatar(
+        newAvatarUrl = await _repo.uploadAvatar(
           userId: _userId!,
           bytes: _pendingAvatarBytes!,
           fileExtension: _pendingAvatarExtension!,
         );
-        await _repo.updateAvatarUrl(userId: _userId!, avatarUrl: avatarUrl);
-        _avatarUrl = avatarUrl;
+        _avatarUrl = newAvatarUrl;
         _pendingAvatarBytes = null;
         _pendingAvatarExtension = null;
       }
+
+      await _repo.updateProfile(
+        userId: _userId!,
+        displayName: displayName,
+        bio: bio,
+        avatarUrl: newAvatarUrl,
+      );
 
       await _repo.updateSettings(
         userId: _userId!,
@@ -185,16 +181,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       AppPreferences.apply(themeMode: _themeMode, languageCode: _languageCode);
 
-      if (displayNameError == null) {
-        _showSnack(_t('Đã lưu cài đặt', 'Settings saved'));
-      } else {
-        _showSnack(
-          _t(
-            'Đã lưu cài đặt, nhưng chưa cập nhật được tên hiển thị',
-            'Settings saved, but could not update display name',
-          ),
-        );
-      }
+      _showSnack(_t('Đã lưu tất cả thay đổi', 'All changes saved'));
     } catch (e) {
       final message = e is PostgrestException
           ? (e.message.isNotEmpty ? e.message : e.toString())
@@ -214,15 +201,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  Future<void> _saveBasicSettings() async {
+    if (_userId == null) return;
+    try {
+      await _repo.updateSettings(
+        userId: _userId!,
+        inAppNotifications: _inAppNotifications,
+        emailNotifications: _emailNotifications,
+        themeMode: _themeMode,
+        languageCode: _languageCode,
+      );
+    } catch (_) {
+      // Background save errors ignored
+    }
+  }
+
   String _t(String vi, String en) => _languageCode == 'en' ? en : vi;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFF6F9FF), Color(0xFFEFF4FF), Color(0xFFF8FBFF)],
+            colors: Theme.of(context).brightness == Brightness.dark
+                ? [
+                    const Color(0xFF1A1D21),
+                    const Color(0xFF14171A),
+                    const Color(0xFF0D0F11),
+                  ]
+                : [
+                    const Color(0xFFF6F9FF),
+                    const Color(0xFFEFF4FF),
+                    const Color(0xFFF8FBFF),
+                  ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -241,14 +253,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               icon: Icons.arrow_back_ios_new_rounded,
                               onTap: () => Navigator.pop(context),
                             ),
-                            const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 _t('Cài đặt', 'Settings'),
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 32,
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFF12263F),
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.white
+                                      : const Color(0xFF12263F),
                                   letterSpacing: -0.8,
                                 ),
                               ),
@@ -321,7 +336,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       Icons.badge_outlined,
                                     ),
                                     filled: true,
-                                    fillColor: Colors.white,
+                                    fillColor: Theme.of(context).cardColor,
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(14),
                                       borderSide: BorderSide(
@@ -351,7 +366,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       Icons.edit_note_rounded,
                                     ),
                                     filled: true,
-                                    fillColor: Colors.white,
+                                    fillColor: Theme.of(context).cardColor,
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(14),
                                       borderSide: BorderSide(
@@ -385,9 +400,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     'Show bell, badge and internal notifications',
                                   ),
                                   value: _inAppNotifications,
-                                  onChanged: (value) => setState(
-                                    () => _inAppNotifications = value,
-                                  ),
+                                  onChanged: (value) async {
+                                    setState(() => _inAppNotifications = value);
+                                    await _saveBasicSettings();
+                                  },
                                 ),
                                 const SizedBox(height: 10),
                                 _switchTile(
@@ -400,9 +416,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     'Receive email when there are new comments',
                                   ),
                                   value: _emailNotifications,
-                                  onChanged: (value) => setState(
-                                    () => _emailNotifications = value,
-                                  ),
+                                  onChanged: (value) async {
+                                    setState(() => _emailNotifications = value);
+                                    await _saveBasicSettings();
+                                  },
                                 ),
                               ],
                             ),
@@ -458,8 +475,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 _updatePrefsOptimistically(lang: next);
                               },
                               decoration: InputDecoration(
+                                prefixIcon: const Icon(Icons.translate),
                                 filled: true,
-                                fillColor: Colors.white,
+                                fillColor: Theme.of(context).cardColor,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(14),
                                   borderSide: BorderSide(
@@ -482,25 +500,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF7FAFF),
+                                color:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.white.withOpacity(0.05)
+                                    : const Color(0xFFF7FAFF),
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: const Color(0xFFCFDBF3),
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.white.withOpacity(0.1)
+                                      : const Color(0xFFCFDBF3),
                                 ),
                               ),
                               child: Row(
                                 children: [
                                   Icon(
                                     Icons.apps_rounded,
-                                    color: Color(0xFF2859D6),
+                                    color: const Color(0xFF2859D6),
                                   ),
-                                  SizedBox(width: 10),
+                                  const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
                                       'TaskMate\n${_t('Phiên bản', 'Version')} 1.0.0',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         height: 1.4,
-                                        color: Color(0xFF1D2E45),
+                                        color:
+                                            Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? Colors.white.withOpacity(0.8)
+                                            : const Color(0xFF1D2E45),
                                       ),
                                     ),
                                   ),
@@ -570,11 +600,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         height: 42,
         width: 42,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFD7E2F3)),
+          border: Border.all(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.white12
+                : const Color(0xFFD7E2F3),
+          ),
         ),
-        child: Icon(icon, size: 19, color: const Color(0xFF233A59)),
+        child: Icon(
+          icon,
+          size: 19,
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white
+              : const Color(0xFF233A59),
+        ),
       ),
     );
   }
@@ -587,16 +627,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.92),
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF212529)
+            : Colors.white.withOpacity(0.92),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFDDE7F7)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF284B8D).withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        border: Border.all(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white12
+              : const Color(0xFFDDE7F7),
+        ),
+        boxShadow: Theme.of(context).brightness == Brightness.dark
+            ? []
+            : [
+                BoxShadow(
+                  color: const Color(0xFF284B8D).withOpacity(0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -617,10 +665,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(width: 10),
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF142C4A),
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : const Color(0xFF142C4A),
                 ),
               ),
             ],
@@ -641,9 +691,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FBFF),
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Colors.white.withOpacity(0.05)
+            : const Color(0xFFF8FBFF),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD7E4FA)),
+        border: Border.all(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white10
+              : const Color(0xFFD7E4FA),
+        ),
       ),
       child: Row(
         children: [
@@ -653,17 +709,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF1F334F),
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : const Color(0xFF1F334F),
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.8,
-                    color: Color(0xFF5A6E8D),
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white60
+                        : const Color(0xFF5A6E8D),
                   ),
                 ),
               ],

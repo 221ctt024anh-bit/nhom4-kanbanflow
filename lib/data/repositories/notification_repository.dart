@@ -36,6 +36,7 @@ class NotificationRepository {
       return AppNotification(
         id: map['id'] as String,
         userId: map['user_id'] as String,
+        senderId: map['sender_id'] as String?,
         taskId: map['task_id'] as String?,
         commentId: map['comment_id'] as String?,
         title: (map['title'] as String?) ?? '',
@@ -62,5 +63,22 @@ class NotificationRepository {
         .update({'is_read': true})
         .eq('user_id', userId)
         .eq('is_read', false);
+  }
+
+  Future<void> createNotification({
+    required String userId,
+    String? taskId,
+    String? commentId,
+    required String title,
+    required String message,
+  }) async {
+    await _client.from('user_notifications').insert({
+      'user_id': userId,
+      'task_id': taskId,
+      'comment_id': commentId,
+      'title': title,
+      'message': message,
+      'is_read': false,
+    });
   }
 }

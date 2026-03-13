@@ -1,4 +1,4 @@
-package com.example.nhom4_kanbanflow
+package com.nhom4.kanbanflow
 
 import io.flutter.embedding.android.FlutterActivity
 

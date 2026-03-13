@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
@@ -63,7 +64,7 @@ class LocalDatabase {
 
     return openDatabase(
       path,
-      version: 3,
+      version: 8,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
@@ -79,9 +80,36 @@ class LocalDatabase {
     if (oldVersion < 3) {
       try {
         await db.execute('ALTER TABLE tasks ADD COLUMN due_at TEXT');
-      } catch (_) {
-        // Column may already exist.
-      }
+      } catch (_) {}
+    }
+    if (oldVersion < 4) {
+      try {
+        await db.execute('ALTER TABLE tasks ADD COLUMN checklist TEXT');
+      } catch (_) {}
+    }
+    if (oldVersion < 5) {
+      try {
+        await db.execute(
+          'ALTER TABLE tasks ADD COLUMN has_attachments INTEGER DEFAULT 0',
+        );
+      } catch (_) {}
+    }
+    if (oldVersion < 6) {
+      try {
+        await db.execute(
+          'ALTER TABLE tasks ADD COLUMN task_type TEXT DEFAULT "text"',
+        );
+      } catch (_) {}
+    }
+    if (oldVersion < 7) {
+      try {
+        await db.execute('ALTER TABLE tasks ADD COLUMN assignee_ids TEXT');
+      } catch (_) {}
+    }
+    if (oldVersion < 8) {
+      try {
+        await db.execute('ALTER TABLE tasks ADD COLUMN updated_at TEXT');
+      } catch (_) {}
     }
   }
 
@@ -102,10 +130,15 @@ class LocalDatabase {
         title TEXT NOT NULL,
         description TEXT NOT NULL,
         status TEXT NOT NULL,
+        assignee_ids TEXT,
         assignee_id TEXT,
         creator_id TEXT,
         due_at TEXT,
+        checklist TEXT,
+        has_attachments INTEGER DEFAULT 0,
+        task_type TEXT DEFAULT "text",
         created_at TEXT NOT NULL,
+        updated_at TEXT,
         FOREIGN KEY (board_id) REFERENCES boards (id) ON DELETE CASCADE
       )
     ''');
@@ -222,6 +255,13 @@ class LocalDatabase {
     return db.delete('tasks', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<TaskModel?> getTaskById(String id) async {
+    final db = await database;
+    final result = await db.query('tasks', where: 'id = ?', whereArgs: [id]);
+    if (result.isEmpty) return null;
+    return TaskModel.fromMap(Map<String, dynamic>.from(result.first));
+  }
+
   Future<int> enqueueOperation({
     required String entity,
     required String operation,
@@ -259,5 +299,20 @@ class LocalDatabase {
   Future<int> removePendingOperation(int id) async {
     final db = await database;
     return db.delete('pending_ops', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> clearPendingOperationsByEntityId(
+    String entity,
+    String entityId,
+  ) async {
+    final ops = await getPendingOperations(entity);
+    for (final op in ops) {
+      try {
+        final payload = jsonDecode(op.payload) as Map<String, dynamic>;
+        if (payload['id'] == entityId) {
+          await removePendingOperation(op.id);
+        }
+      } catch (_) {}
+    }
   }
 }

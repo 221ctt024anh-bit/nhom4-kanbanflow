@@ -90,7 +90,16 @@ class _UserAvatarState extends State<UserAvatar> {
       radius: widget.radius,
       backgroundColor: Colors.blueAccent.withValues(alpha: 0.2),
       backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-      child: avatarUrl == null
+      onBackgroundImageError: avatarUrl != null
+          ? (exception, stackTrace) {
+              if (mounted) {
+                setState(() {
+                  _profile?['avatar_url'] = null;
+                });
+              }
+            }
+          : null,
+      child: (avatarUrl == null || _profile?['avatar_url'] == null)
           ? Text(
               initials,
               style: TextStyle(
